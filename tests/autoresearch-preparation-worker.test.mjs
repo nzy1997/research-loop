@@ -86,8 +86,12 @@ test("needs-input records exactly one question without publishing and a child re
   const first = dependencies(context, { envelope: { outcome: "needs_input", summary: "Need metric", manifestPath: null, question } });
   const worker = createPreparationWorker({ rootDir: context.rootDir, privateDataRoot: "/private-data", rebuildIndex: async () => {}, ...first });
   assert.deepEqual(await worker({ jobId: JOB, problemId: PROBLEM, answers: { metric: "score" } }), { state: "needs_input", question });
-  assert.deepEqual(first.order, ["read:ARJ-20260728T080000Z-deadbeef", "stage", "scaffolding", "building_benchmark", "preparing_datasets", "list", "codex", "preflight", "event:needs-input", "needs_input"]);
+  assert.deepEqual(first.order, ["read:ARJ-20260728T080000Z-deadbeef", "stage", "scaffolding", "building_benchmark", "preparing_datasets", "list", "codex", "event:needs-input", "needs_input"]);
   assert.equal(first.order.includes("publish"), false);
+  const eventsBeforeRetry = first.order.filter((item) => item === "event:needs-input").length;
+  assert.deepEqual(await worker({ jobId: JOB, problemId: PROBLEM, answers: { metric: "score" } }), { state: "needs_input" });
+  assert.equal(first.order.filter((item) => item === "event:needs-input").length, eventsBeforeRetry);
+  assert.equal(first.order.at(-1), `read:${JOB}`);
 
   context.jobs.set(CHILD_JOB, { jobId: CHILD_JOB, problemId: PROBLEM, parentJobId: JOB, state: "queued" });
   const resumed = dependencies(context);
