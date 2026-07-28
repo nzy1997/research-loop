@@ -159,7 +159,7 @@ export async function main({ rootDir = process.cwd(), runIndexBuildFn = runIndex
 
   await runIndexBuildFn(resolvedRootDir);
 
-  const service = await startService({ rootDir: resolvedRootDir, privateDataRoot: environment.AUTORESEARCH_PRIVATE_DATA_ROOT });
+  const service = await startService({ rootDir: resolvedRootDir, privateDataRoot: environment.AUTORESEARCH_PRIVATE_ROOT });
   let serviceClose;
   const closeService = () => {
     serviceClose ??= Promise.resolve(service.close()).catch((error) => console.error(error.message));
@@ -183,7 +183,7 @@ export async function main({ rootDir = process.cwd(), runIndexBuildFn = runIndex
     throw error;
   }
 
-  const { AUTORESEARCH_PRIVATE_DATA_ROOT: _privateDataRoot, ...vinextEnvironment } = environment;
+  const { AUTORESEARCH_PRIVATE_ROOT: _privateRoot, ...vinextEnvironment } = environment;
   const child = spawnFn("vinext", ["dev"], {
     cwd: resolvedRootDir,
     env: { ...vinextEnvironment, AUTORESEARCH_CAPABILITY_TOKEN: service.token, AUTORESEARCH_SERVICE_ORIGIN: service.origin, WRANGLER_LOG_PATH: ".wrangler/wrangler.log" },

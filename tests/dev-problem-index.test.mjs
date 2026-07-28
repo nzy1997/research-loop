@@ -61,7 +61,7 @@ test("dev supervision starts the service before vinext, scopes its capability, a
     startService: async () => { calls.push("service"); return { origin: "http://127.0.0.1:9123", token: "capability", close: serviceChild.close.bind(serviceChild) }; },
     spawnFn(command, args, options) { calls.push({ command, args, options }); return vinext; },
     processRef: signals,
-    environment: { AUTORESEARCH_PRIVATE_DATA_ROOT: "/private/data", PATH: "/test/bin" },
+    environment: { AUTORESEARCH_PRIVATE_ROOT: "/private/data", PATH: "/test/bin" },
   });
   assert.equal(calls[1], "service");
   assert.deepEqual(calls[2], {
@@ -121,9 +121,9 @@ test("Vite proxies only local autoresearch routes and overwrites the browser cap
   });
 });
 
-test("manual service help documents the required private data root", async () => {
+test("manual service help documents the required private root", async () => {
   const makefile = await readFile(join(process.cwd(), "Makefile"), "utf8");
-  assert.match(makefile, /AUTORESEARCH_PRIVATE_DATA_ROOT/);
+  assert.match(makefile, /AUTORESEARCH_PRIVATE_ROOT/);
 });
 
 test("watches the problems/ tree without recursive repo-wide watchers", async (t) => {

@@ -34,11 +34,11 @@ async function fixture(t, { outcomes = {}, tamper = null, assertRuntimeIsolation
     `const outcomes = ${JSON.stringify(outcomes)};`,
     `const datasets = ${JSON.stringify(datasets)};`,
     "const evaluator = new Set(['correctness-negative', 'hard-code-negative', 'baseline-reproduction', 'score-arithmetic', 'reproducibility']).has(check);",
-    `const isolated = !${JSON.stringify(assertRuntimeIsolation)} || (evaluator ? typeof process.env.AUTORESEARCH_PRIVATE_DATA_ROOT === 'string' && process.env.AUTORESEARCH_PRIVATE_DATA_ROOT !== ${JSON.stringify(privateDataRoot)} : !process.env.AUTORESEARCH_PRIVATE_DATA_ROOT && !process.env.HOME);`,
+    `const isolated = !${JSON.stringify(assertRuntimeIsolation)} || (evaluator ? typeof process.env.AUTORESEARCH_PRIVATE_ROOT === 'string' && process.env.AUTORESEARCH_PRIVATE_ROOT !== ${JSON.stringify(privateDataRoot)} : !process.env.AUTORESEARCH_PRIVATE_ROOT && !process.env.HOME);`,
     "const baseline = { id: 'baseline-v1', digest: 'e'.repeat(64), score: 7, components: [3, 4] };",
     "const fallback = check === 'hard-code-negative' ? { ok: false } : check === 'baseline-reproduction' ? { ok: true, baseline, datasets } : check === 'reproducibility' ? { ok: true, score: 7, components: [3, 4], baseline, datasets } : check === 'score-arithmetic' ? { ok: true, score: 7, components: [3, 4] } : { ok: true, score: 7, components: [3, 4] };",
     "const result = outcomes[check] ?? fallback;",
-    `if (${JSON.stringify(evaluatorWrites)} && evaluator) (await import('node:fs')).writeFileSync(process.env.AUTORESEARCH_PRIVATE_DATA_ROOT + '/development.json', 'tampered');`,
+    `if (${JSON.stringify(evaluatorWrites)} && evaluator) (await import('node:fs')).writeFileSync(process.env.AUTORESEARCH_PRIVATE_ROOT + '/development.json', 'tampered');`,
     "process.stdout.write(JSON.stringify(isolated ? result : { ok: check === 'hard-code-negative', diagnostics: 'runtime environment was not isolated' }) + '\\n');",
   ].join("\n"));
   await chmod(command, 0o755);

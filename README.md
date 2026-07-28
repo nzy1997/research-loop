@@ -160,7 +160,9 @@ The package scripts that have no Make target:
   and agent suites
 - `npm run test:unit:problems`: the problem-console `.mjs` suites — schema,
   indexer, repository, presentation, view state, dev watcher, Codex launch, and
-  the static example content
+  the static example content, including local autoresearch preparation
+- `npm run test:autoresearch:preparation`: focused local autoresearch
+  preparation contract, process, service, scheduler, and view-model suites
 - `npm run test:pages`: `pages:build` followed by the Pages showcase assertions
 - `npm run test:rendered`: assertions against the built HTML and static assets
 - `npm run test:e2e`: Playwright, against the built site
@@ -189,7 +191,7 @@ publishes the `out/` snapshot produced by `npm run pages:build`.
 
 ## Not in this phase
 
-- No autonomous solver backend, queue, or agent that runs unattended.
+- No remote or cloud queue, D1/R2 model, or deployed autonomous service.
 - No D1 or R2 data model. The bindings in `.openai/hosting.json` stay `null`,
   `db/schema.ts` is intentionally empty, and `examples/d1/` plus
   `drizzle.config.ts` remain an unused optional surface.

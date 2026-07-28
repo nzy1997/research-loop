@@ -134,6 +134,35 @@ test("pages showcase artifact contains no local agent launcher content", async (
   }
 });
 
+test("pages showcase contains only the noninteractive local-mode preparation notice", async () => {
+  const files = await collectFiles(out);
+  const blockedText = [
+    "/__local/autoresearch",
+    "AUTORESEARCH_CAPABILITY_TOKEN",
+    "AUTORESEARCH_PRIVATE_ROOT",
+    "infrastructure.json",
+    "preflight-report.json",
+    "events.jsonl",
+    "stderr.log",
+  ];
+
+  for (const file of files.filter((path) => /\.(?:css|html|js|json|svg|txt)$/.test(path))) {
+    const text = await readFile(file, "utf8");
+    for (const marker of blockedText) {
+      assert.equal(text.includes(marker), false, `${relative(out, file)} exposes ${marker}`);
+    }
+  }
+
+  const problem = await readFile(join(out, "problems", "Prob-000", "index.html"), "utf8");
+  assert.match(problem, /Available in local mode/);
+  assert.doesNotMatch(problem, /Autoresearch preparation is available only for qualifying or accepted local problems\./);
+  assert.doesNotMatch(problem, /Prepare autoresearch/);
+});
+
+test("pages showcase copies only the Prob-000 problem source", () => {
+  assert.deepEqual(generatedIndex.problems.map((problem) => problem.id), ["Prob-000"]);
+});
+
 test("pages showcase excludes imported AutoQEC problem data", async () => {
   const files = await collectFiles(out);
   const artifactPaths = files.map((file) => relative(out, file));

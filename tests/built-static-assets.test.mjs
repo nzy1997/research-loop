@@ -60,6 +60,10 @@ const FORBIDDEN_SEGMENTS = [
   ".figures",
   "rendered.md",
   "ref.bib",
+  "infrastructure.json",
+  "preflight-report.json",
+  "events.jsonl",
+  "stderr.log",
 ];
 
 /** Every file under `root`, as POSIX paths relative to it. */

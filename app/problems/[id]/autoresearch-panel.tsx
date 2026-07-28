@@ -78,6 +78,14 @@ export function AutoresearchPanel({
 
   useEffect(() => () => controller.current?.abort(), []);
 
+  if (staticMode) {
+    return (
+      <section className={styles.panel} aria-label="Autoresearch preparation">
+        <p>Available in local mode</p>
+      </section>
+    );
+  }
+
   const prepare = () => {
     if (!localMode) return;
     void request(`/__local/autoresearch/problems/${problemId}/prepare`, {

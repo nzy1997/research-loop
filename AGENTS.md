@@ -62,7 +62,11 @@ See `docs/skills.md` for what each skill owns, reads, and may write.
 
 - Preserve the current dashboard source and appearance. Do not rewrite `app/page.tsx`, `app/globals.css`, or `app/layout.tsx` to make tests pass.
 - Reuse the opaque Sites project ID in `.openai/hosting.json` exactly: `appgprj_6a66e89526a88191a9e969c6f441086c`. Never invent, reformat, or replace it, and never create a replacement site; deployment may stay blocked until that project is visible.
-- This phase has no autonomous backend, no D1 or R2 data model, and no published draft or literature source.
+- The only autonomous backend is the local loopback autoresearch sidecar.
+  It may write `.generated/autoresearch-*` staging and, after host validation,
+  `problems/<id>/infrastructure/`. It must not write trusted knowledge, publish
+  private data, expose a deployed execution route, or start a campaign without
+  the user's separate problem-page confirmation.
 
 ## Implementation guardrails
 

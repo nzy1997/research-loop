@@ -16,8 +16,8 @@ function rebuildIndex(rootDir) {
   });
 }
 
-export async function startService({ rootDir = process.cwd(), host = "127.0.0.1", port = 0, token = randomBytes(24).toString("base64url"), privateDataRoot = process.env.AUTORESEARCH_PRIVATE_DATA_ROOT } = {}) {
-  if (typeof privateDataRoot !== "string" || privateDataRoot.length === 0) throw new TypeError("AUTORESEARCH_PRIVATE_DATA_ROOT is required");
+export async function startService({ rootDir = process.cwd(), host = "127.0.0.1", port = 0, token = randomBytes(24).toString("base64url"), privateDataRoot = process.env.AUTORESEARCH_PRIVATE_ROOT } = {}) {
+  if (typeof privateDataRoot !== "string" || privateDataRoot.length === 0) throw new TypeError("AUTORESEARCH_PRIVATE_ROOT is required");
   const resolvedRoot = resolve(rootDir);
   const jobStore = createJobStore({ rootDir: resolvedRoot });
   const worker = createPreparationWorker({
