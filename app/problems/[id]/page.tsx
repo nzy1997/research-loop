@@ -10,6 +10,7 @@ import { createResearchRepository } from "@/lib/problems/research-repository.mjs
 import { buildProblemDetailResearchState } from "@/lib/problems/research-route-data.mjs";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AutoresearchPanel } from "./autoresearch-panel";
 
 export default async function ProblemDetailPage({
   params,
@@ -56,6 +57,8 @@ export default async function ProblemDetailPage({
             <span>300 s / run</span>
           </div>
         </header>
+
+        <AutoresearchPanel problemId={problem.id} initialEligibility={false} staticMode={true} />
 
         <p className="example-disclaimer">{example.manifest.disclaimer}</p>
 
@@ -131,6 +134,7 @@ export default async function ProblemDetailPage({
             <span>{ledger.rows.length} attempts</span>
           </div>
         </header>
+        <AutoresearchPanel problemId={problem.id} initialEligibility={problem.status === "qualifying" || problem.status === "accepted"} staticMode={false} />
         <p className="example-disclaimer">{researchState.disclaimer}</p>
         <dl className="research-metric-strip" aria-label="Research metrics">
           {ledger.cards.map((card) => (
@@ -210,6 +214,7 @@ export default async function ProblemDetailPage({
       <p className="eyebrow">{problem.id}</p>
       <h1>{problem.title}</h1>
       <p className="detail-summary">{problem.summary}</p>
+      <AutoresearchPanel problemId={problem.id} initialEligibility={problem.status === "qualifying" || problem.status === "accepted"} staticMode={false} />
       <section className="detail-panel" aria-labelledby="detail-status-heading">
         <h2 id="detail-status-heading">Problem detail</h2>
         <p>The detailed problem workspace will be designed next; this page currently locks the route, identity, and return path.</p>
