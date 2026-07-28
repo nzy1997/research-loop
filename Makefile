@@ -22,6 +22,7 @@
 help:
 	@echo 'Research Loop'
 	@echo
+	@echo '  AUTORESEARCH_PRIVATE_DATA_ROOT=/absolute/private-data  required for make dev and make autoresearch-service'
 	@echo '  make dev                                        install if needed, then serve the problem console locally'
 	@echo '  make build                                      index problems/, render knowledge/ into public/knowledge/, then build the app'
 	@echo '  make test                                       lint, both unit suites, pages showcase, rendered-output tests, browser tests'
@@ -48,6 +49,10 @@ help:
 	@echo '  make zotero-plugin                              test and build the installable Zotero XPI'
 
 dev: node_modules/.package-lock.json
+	@if [ -z "$(AUTORESEARCH_PRIVATE_DATA_ROOT)" ]; then \
+		echo 'usage: AUTORESEARCH_PRIVATE_DATA_ROOT=/absolute/private-data make dev' >&2; \
+		exit 2; \
+	fi
 	npm run dev
 
 build: node_modules/.package-lock.json
@@ -128,6 +133,10 @@ problem-publish: node_modules/.package-lock.json
 	@npm run --silent problem:publish -- --stage "$(STAGE)" --id "$(ID)"
 
 autoresearch-service: node_modules/.package-lock.json
+	@if [ -z "$(AUTORESEARCH_PRIVATE_DATA_ROOT)" ]; then \
+		echo 'usage: AUTORESEARCH_PRIVATE_DATA_ROOT=/absolute/private-data make autoresearch-service' >&2; \
+		exit 2; \
+	fi
 	npm run autoresearch:service
 
 node_modules/.package-lock.json: package-lock.json

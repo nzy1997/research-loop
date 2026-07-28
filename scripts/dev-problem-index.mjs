@@ -159,6 +159,8 @@ export async function main({ rootDir = process.cwd(), runIndexBuildFn = runIndex
 
   await runIndexBuildFn(resolvedRootDir);
 
+  const service = await startService({ rootDir: resolvedRootDir, privateDataRoot: environment.AUTORESEARCH_PRIVATE_DATA_ROOT });
+
   let timer;
   const watcher = await watchProblemFilesFn({
     rootDir: resolvedRootDir,
@@ -170,15 +172,10 @@ export async function main({ rootDir = process.cwd(), runIndexBuildFn = runIndex
     },
   });
 
-  let service;
-  try { service = await startService({ rootDir: resolvedRootDir }); } catch (error) {
-    watcher.close();
-    clearTimeout(timer);
-    throw error;
-  }
+  const { AUTORESEARCH_PRIVATE_DATA_ROOT: _privateDataRoot, ...vinextEnvironment } = environment;
   const child = spawnFn("vinext", ["dev"], {
     cwd: resolvedRootDir,
-    env: { ...environment, AUTORESEARCH_CAPABILITY_TOKEN: service.token, AUTORESEARCH_SERVICE_ORIGIN: service.origin, WRANGLER_LOG_PATH: ".wrangler/wrangler.log" },
+    env: { ...vinextEnvironment, AUTORESEARCH_CAPABILITY_TOKEN: service.token, AUTORESEARCH_SERVICE_ORIGIN: service.origin, WRANGLER_LOG_PATH: ".wrangler/wrangler.log" },
     stdio: "inherit",
   });
 

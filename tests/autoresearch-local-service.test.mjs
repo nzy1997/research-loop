@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { startLocalAutoresearchService } from "../lib/autoresearch/local-service.mjs";
 
@@ -99,14 +100,38 @@ test("deduplicates prepare jobs and returns a bounded public status", async (t) 
   assert.deepEqual(await status.json(), { jobId: firstJob.jobId, problemId: PROBLEM, state: "queued" });
 });
 
+test("concurrent prepare requests reserve one job before asynchronous creation", async (t) => {
+  const rootDir = await mkdtemp(join(tmpdir(), "autoresearch-local-service-"));
+  t.after(() => rm(rootDir, { recursive: true, force: true }));
+  const calls = [];
+  const created = job({ jobId: "ARJ-20260728T080001Z-cafebabe" });
+  const jobStore = {
+    async create(value) { calls.push(value); await delay(15); return created; },
+    async read() { return created; },
+    async list() { return [created]; },
+  };
+  const scheduler = { enqueue(value) { return value; }, resumeAfterInput() {} };
+  const running = await startLocalAutoresearchService({ rootDir, token: TOKEN, scheduler, jobStore });
+  t.after(() => running.close());
+  const responses = await Promise.all([
+    request(running.origin, `/__local/autoresearch/problems/${PROBLEM}/prepare`, { method: "POST", body: "{}" }),
+    request(running.origin, `/__local/autoresearch/problems/${PROBLEM}/prepare`, { method: "POST", body: "{}" }),
+  ]);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(await Promise.all(responses.map((response) => response.json())), [
+    { jobId: created.jobId, problemId: PROBLEM, state: "queued" },
+    { jobId: created.jobId, problemId: PROBLEM, state: "queued" },
+  ]);
+});
+
 test("exposes only the active bounded question and downloads event logs as text", async (t) => {
   const { origin, rootDir } = await service(t, { initial: job({ state: "needs_input", secret: TOKEN, path: "/private/path", stderr: "nope" }) });
   await mkdir(join(rootDir, "jobs", JOB), { recursive: true });
-  await writeFile(join(rootDir, "jobs", JOB, "events.jsonl"), `${JSON.stringify({ code: "needs-input", question: { id: "metric", prompt: "Choose a metric", answerType: "choice", choices: ["score"] } })}\n${JSON.stringify({ stderr: "secret", token: TOKEN })}\n`);
+  await writeFile(join(rootDir, "jobs", JOB, "events.jsonl"), `${JSON.stringify({ code: "needs-input", question: { id: "metric", prompt: "Choose a metric", answerType: "choice", choices: ["score", "loss"] } })}\n${JSON.stringify({ stderr: "secret", token: TOKEN })}\n`);
   const response = await request(origin, `/__local/autoresearch/jobs/${JOB}`);
   assert.equal(response.status, 200);
   const body = await response.json();
-  assert.deepEqual(body, { jobId: JOB, problemId: PROBLEM, state: "needs_input", question: { id: "metric", prompt: "Choose a metric", answerType: "choice", choices: ["score"] } });
+  assert.deepEqual(body, { jobId: JOB, problemId: PROBLEM, state: "needs_input", question: { id: "metric", prompt: "Choose a metric", answerType: "choice", choices: ["score", "loss"] } });
   assert.equal(JSON.stringify(body).includes(TOKEN), false);
   assert.equal("events" in body, false);
   const log = await request(origin, `/__local/autoresearch/logs/${PROBLEM}/${JOB}`);
@@ -114,4 +139,12 @@ test("exposes only the active bounded question and downloads event logs as text"
   assert.equal(log.headers.get("content-type"), "text/plain; charset=utf-8");
   assert.match(log.headers.get("content-disposition"), /attachment/);
   assert.match(await log.text(), /needs-input/);
+});
+
+test("omits malformed or unbounded persisted questions from public status", async (t) => {
+  const { origin, rootDir } = await service(t, { initial: job({ state: "needs_input" }) });
+  await mkdir(join(rootDir, "jobs", JOB), { recursive: true });
+  await writeFile(join(rootDir, "jobs", JOB, "events.jsonl"), `${JSON.stringify({ code: "needs-input", question: { id: "metric", prompt: "x".repeat(10_000), answerType: "arbitrary", choices: Array.from({ length: 100 }, () => "choice") } })}\n`);
+  const response = await request(origin, `/__local/autoresearch/jobs/${JOB}`);
+  assert.deepEqual(await response.json(), { jobId: JOB, problemId: PROBLEM, state: "needs_input" });
 });
