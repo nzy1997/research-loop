@@ -85,3 +85,15 @@ test("ready preparation names its published revision and keeps campaign executio
     pollAfterMs: null,
   });
 });
+
+test("ready preparation never exposes a non-public infrastructure identifier", () => {
+  const view = buildPreparationPanelState({
+    problem: eligibleProblem,
+    serviceState: { state: "ready", infrastructureId: "/private/path" },
+    localMode: true,
+  });
+
+  assert.deepEqual(view.metadata, [{ label: "Revision", value: "Published infrastructure" }]);
+  assert.equal(view.body, "Published infrastructure passed all preflight checks.");
+  assert.equal(JSON.stringify(view).includes("/private/path"), false);
+});
