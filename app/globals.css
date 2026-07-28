@@ -538,6 +538,14 @@ a { color: inherit; text-decoration: none; }
 .detail-panel h2 { margin: 0; font-size: 14px; }
 .detail-panel p { margin: 8px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 
+.authoritative-source-panel { margin-top: 16px; }
+.authoritative-source-list { display: grid; gap: 10px; margin: 18px 0 0; }
+.authoritative-source-list div { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 12px; }
+.authoritative-source-list dt { color: var(--muted); font-size: 12px; }
+.authoritative-source-list dd { min-width: 0; margin: 0; font: 12px/1.5 var(--font-geist-mono); overflow-wrap: anywhere; }
+.authoritative-source-list a { color: var(--green); }
+.authoritative-source-list code { font: inherit; }
+
 .research-shell { width: min(1360px, calc(100% - 48px)); }
 .research-header { display: flex; align-items: start; justify-content: space-between; gap: 24px; }
 .research-badges { display: flex; flex-wrap: wrap; gap: 6px; justify-content: end; }

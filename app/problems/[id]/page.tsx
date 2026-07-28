@@ -112,6 +112,30 @@ export default async function ProblemDetailPage({
         <h2 id="detail-status-heading">Problem detail</h2>
         <p>The detailed problem workspace will be designed next; this page currently locks the route, identity, and return path.</p>
       </section>
+      {problem.sourceBinding ? (
+        <section className="detail-panel authoritative-source-panel" aria-labelledby="authoritative-source-heading">
+          <h2 id="authoritative-source-heading">Authoritative source</h2>
+          <p>This console record is not the authoritative definition.</p>
+          <dl className="authoritative-source-list">
+            <div>
+              <dt>Repository</dt>
+              <dd><a href={problem.sourceBinding.repository} target="_blank" rel="noreferrer">{problem.sourceBinding.repository}</a></dd>
+            </div>
+            <div>
+              <dt>Revision</dt>
+              <dd><code>{problem.sourceBinding.revision}</code></dd>
+            </div>
+            <div>
+              <dt>Path</dt>
+              <dd><code>{problem.sourceBinding.path}</code></dd>
+            </div>
+            <div>
+              <dt>Digest</dt>
+              <dd><code>{problem.sourceBinding.digest}</code></dd>
+            </div>
+          </dl>
+        </section>
+      ) : null}
     </main>
   );
 }
