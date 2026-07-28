@@ -97,3 +97,16 @@ test("ready preparation never exposes a non-public infrastructure identifier", (
   assert.equal(view.body, "Published infrastructure passed all preflight checks.");
   assert.equal(JSON.stringify(view).includes("/private/path"), false);
 });
+
+test("ready preparation rejects revision identifiers with trailing line terminators", () => {
+  const infrastructureId = "INF-003\n";
+  const view = buildPreparationPanelState({
+    problem: eligibleProblem,
+    serviceState: { state: "ready", infrastructureId },
+    localMode: true,
+  });
+
+  assert.deepEqual(view.metadata, [{ label: "Revision", value: "Published infrastructure" }]);
+  assert.equal(view.body, "Published infrastructure passed all preflight checks.");
+  assert.equal(JSON.stringify(view).includes(infrastructureId), false);
+});
