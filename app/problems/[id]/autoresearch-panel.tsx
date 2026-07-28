@@ -24,17 +24,15 @@ const jobIdPattern = /^ARJ-\d{8}T\d{6}Z-[a-f0-9]{8}$/;
 export function AutoresearchPanel({
   problemId,
   initialEligibility,
-  staticMode,
 }: {
   problemId: string;
   initialEligibility: boolean;
-  staticMode: boolean;
 }) {
   const [serviceState, setServiceState] = useState<ServiceState | null>(null);
   const [answer, setAnswer] = useState("");
   const requestSequence = useRef(0);
   const controller = useRef<AbortController | null>(null);
-  const localMode = !staticMode && initialEligibility;
+  const localMode = initialEligibility;
   const view = buildPreparationPanelState({
     problem: { id: problemId, status: initialEligibility ? "qualifying" : "draft" },
     serviceState,
@@ -65,26 +63,18 @@ export function AutoresearchPanel({
   const refresh = useCallback(() => request(`/__local/autoresearch/problems/${problemId}`), [problemId, request]);
 
   useEffect(() => {
-    if (staticMode || !localMode) return undefined;
+    if (!localMode) return undefined;
     const initialRefresh = window.setTimeout(() => void refresh(), 0);
     return () => window.clearTimeout(initialRefresh);
-  }, [refresh, staticMode, localMode]);
+  }, [refresh, localMode]);
 
   useEffect(() => {
-    if (staticMode || !localMode || view.pollAfterMs === null) return undefined;
+    if (!localMode || view.pollAfterMs === null) return undefined;
     const poll = window.setTimeout(() => void refresh(), view.pollAfterMs);
     return () => window.clearTimeout(poll);
-  }, [refresh, staticMode, localMode, view.pollAfterMs]);
+  }, [refresh, localMode, view.pollAfterMs]);
 
   useEffect(() => () => controller.current?.abort(), []);
-
-  if (staticMode) {
-    return (
-      <section className={styles.panel} aria-label="Autoresearch preparation">
-        <p>Available in local mode</p>
-      </section>
-    );
-  }
 
   const prepare = () => {
     if (!localMode) return;

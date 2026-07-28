@@ -75,18 +75,23 @@ test("attempt detail state returns dossiers for known attempts and not-found for
 test("problem routes place the local preparation panel between headers and research detail", async () => {
   const page = await readFile(new URL("../app/problems/[id]/page.tsx", import.meta.url), "utf8");
   const panel = await readFile(new URL("../app/problems/[id]/autoresearch-panel.tsx", import.meta.url), "utf8");
+  const staticPanel = await readFile(new URL("../app/problems/[id]/static-autoresearch-panel.tsx", import.meta.url), "utf8");
   const css = await readFile(new URL("../app/problems/[id]/autoresearch-panel.module.css", import.meta.url), "utf8");
 
-  assert.match(page, /import \{ AutoresearchPanel \} from "\.\/autoresearch-panel";/);
-  assert.match(page, /<\/header>\s*<AutoresearchPanel[\s\S]*?staticMode=\{true\}[\s\S]*?\/>\s*<p className="example-disclaimer">/);
-  assert.match(page, /<\/header>\s*<AutoresearchPanel[\s\S]*?staticMode=\{false\}[\s\S]*?\/>\s*<p className="example-disclaimer">/);
+  assert.match(page, /import \{ StaticAutoresearchPanel \} from "\.\/static-autoresearch-panel";/);
+  assert.match(page, /<\/header>\s*<StaticAutoresearchPanel\s*\/>\s*<p className="example-disclaimer">/);
+  assert.doesNotMatch(page, /<AutoresearchPanel[\s\S]*?staticMode=\{true\}/);
+  assert.ok(page.indexOf('if (isStaticResearchExampleProblem(problem.id))') < page.indexOf('await import("./autoresearch-panel")'));
+  assert.match(page, /<\/header>\s*<AutoresearchPanel[\s\S]*?\/>\s*<p className="example-disclaimer">/);
   assert.match(page, /<p className="detail-summary">\{problem\.summary\}<\/p>\s*<AutoresearchPanel[\s\S]*?\/>\s*<section className="detail-panel"/);
   assert.match(panel, /^"use client";/);
   assert.match(panel, /import styles from "\.\/autoresearch-panel\.module\.css";/);
   assert.match(panel, /AbortController/);
   assert.match(panel, /requestSequence/);
-  assert.match(panel, /if \(staticMode \|\| !localMode\) return undefined;/);
-  assert.match(panel, /if \(staticMode \|\| !localMode \|\| view\.pollAfterMs === null\) return undefined;/);
+  assert.match(panel, /if \(!localMode\) return undefined;/);
+  assert.match(panel, /if \(!localMode \|\| view\.pollAfterMs === null\) return undefined;/);
+  assert.match(staticPanel, /Available in local mode/);
+  assert.doesNotMatch(staticPanel, /__local\/autoresearch|AUTORESEARCH_/);
   assert.match(panel, /const payload = await response\.json\(\);\s*if \(sequence !== requestSequence\.current \|\| currentController\.signal\.aborted\) return;\s*setServiceState\(payload\);/);
   assert.match(panel, /aria-live="polite"/);
   assert.match(panel, /<form/);

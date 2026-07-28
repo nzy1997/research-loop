@@ -159,8 +159,13 @@ test("pages showcase contains only the noninteractive local-mode preparation not
   assert.doesNotMatch(problem, /Prepare autoresearch/);
 });
 
-test("pages showcase copies only the Prob-000 problem source", () => {
+test("pages showcase copies only the Prob-000 problem source", async () => {
   assert.deepEqual(generatedIndex.problems.map((problem) => problem.id), ["Prob-000"]);
+  const problemEntries = await readdir(join(out, "problems"), { withFileTypes: true });
+  assert.deepEqual(
+    problemEntries.filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort(),
+    ["Prob-000"],
+  );
 });
 
 test("pages showcase excludes imported AutoQEC problem data", async () => {
