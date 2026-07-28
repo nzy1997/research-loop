@@ -79,6 +79,23 @@ test("builds a deterministic index and summary from problem directories", async 
   assert.deepEqual(index.diagnostics, []);
 });
 
+test("preserves a valid external authoritative source binding", async () => {
+  const root = await makeRoot();
+  const sourceBinding = {
+    kind: "git-path",
+    repository: "https://github.com/example/research-problems",
+    revision: "0123456789abcdef0123456789abcdef01234567",
+    path: "problems/Prob-001",
+    digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  };
+  await writeProblem(root, "Prob-001", { sourceBinding });
+
+  const index = await buildProblemIndex({ rootDir: root });
+
+  assert.deepEqual(index.diagnostics, []);
+  assert.deepEqual(index.problems[0].sourceBinding, sourceBinding);
+});
+
 test("isolates damaged manifests and duplicate IDs", async () => {
   const root = await makeRoot();
   await writeProblem(root, "Prob-001");

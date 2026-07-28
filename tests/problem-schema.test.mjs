@@ -66,6 +66,20 @@ test("rejects unknown top-level manifest fields", () => {
   assert.match(result.errors[0].message, /Unknown top-level field/);
 });
 
+test("accepts an optional immutable external source binding", () => {
+  const sourceBinding = {
+    kind: "git-path",
+    repository: "https://github.com/example/research-problems",
+    revision: "0123456789abcdef0123456789abcdef01234567",
+    path: "problems/Prob-001",
+    digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  };
+
+  const result = validateProblemManifest(manifest({ sourceBinding }));
+
+  assert.equal(result.ok, true);
+});
+
 test("requires executable or passed gate readiness for accepted and later statuses", () => {
   const result = validateProblemManifest(
     manifest({

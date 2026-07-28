@@ -48,8 +48,8 @@ async function render(pathname = "/") {
 
 async function buildCurrentIndex() {
   await execFileAsync(
-    fileURLToPath(new URL("../node_modules/.bin/vinext", import.meta.url)),
-    ["build"],
+    process.execPath,
+    [fileURLToPath(new URL("../node_modules/vinext/dist/cli.js", import.meta.url)), "build"],
     {
       cwd: workspaceRoot,
       env: { ...process.env, WRANGLER_LOG_PATH: ".wrangler/wrangler.log" },
@@ -107,6 +107,14 @@ async function renderFilesystemFixture({ manifests, damagedIds = [] }, pathname 
   }
 }
 
+const externalBinding = {
+  kind: "git-path",
+  repository: "https://github.com/example/research-problems",
+  revision: "0123456789abcdef0123456789abcdef01234567",
+  path: "problems/Prob-017",
+  digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+};
+
 const acceptedFixture = {
   schemaVersion: 1,
   id: "Prob-017",
@@ -121,6 +129,7 @@ const acceptedFixture = {
   },
   createdAt: "2026-07-27T09:00:00.000Z",
   updatedAt: "2026-07-27T11:45:00.000Z",
+  sourceBinding: externalBinding,
 };
 
 test("server-renders the problem console shell", async () => {
@@ -262,6 +271,13 @@ test("server-renders the generic problem detail shell for non-example problems",
   assert.match(html, /<h1>Fresh Hamiltonian gate<\/h1>/);
   assert.match(html, /<p class="detail-summary">Interval arithmetic on held-out instances\.<\/p>/);
   assert.match(html, /The detailed problem workspace will be designed next; this page currently locks the route, identity, and return path\./);
+  assert.match(html, /<h2 id="authoritative-source-heading">Authoritative source<\/h2>/);
+  assert.match(html, /This console record is not the authoritative definition\./);
+  assert.match(html, /<a href="https:\/\/github\.com\/example\/research-problems" target="_blank" rel="noreferrer">https:\/\/github\.com\/example\/research-problems<\/a>/);
+  assert.match(html, /0123456789abcdef0123456789abcdef01234567/);
+  assert.match(html, /problems\/Prob-017/);
+  assert.match(html, /sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/);
+  assert.doesNotMatch(html, /Sync source|Edit source|Run source/);
   assert.doesNotMatch(html, /[\u3400-\u9FFF]/u);
   assert.match(html, /<a href="\/" class="back-link">← Back to problems<\/a>/);
 });

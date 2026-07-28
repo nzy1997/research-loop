@@ -44,6 +44,39 @@ npm run dev
 `npm run dev` builds the index once, watches `problems/` for changes to
 `problem.json` and `problem.md`, and rebuilds the index as it serves.
 
+### External authoritative bindings
+
+An optional `sourceBinding` in `problem.json` can point a local console record
+to an immutable problem definition maintained elsewhere. It records authority;
+it does not import, synchronize, or execute the external source.
+
+```json
+{
+  "sourceBinding": {
+    "kind": "git-path",
+    "repository": "https://github.com/owner/repository",
+    "revision": "0123456789abcdef0123456789abcdef01234567",
+    "path": "problems/Prob-017",
+    "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+}
+```
+
+The binding requires an HTTPS repository URL, a lowercase 40- or 64-character
+commit ID, a normalized repository-relative POSIX path, and a lowercase SHA-256
+digest. The detail route displays these fields read-only and explicitly marks
+the local record as non-authoritative.
+
+When another trusted process retrieves the external descriptor, compare it
+without mutating the local manifest:
+
+```js
+import { verifySourceBinding } from "./lib/problems/source-binding.mjs";
+
+const result = verifySourceBinding(declaredBinding, observedDescriptor);
+// result.ok is false and names repository/revision/path/digest fields on drift.
+```
+
 To create a problem, click `+ Add problem` on the homepage. Codex opens a new
 task with the issue #133 context prefilled; send it, answer one question at a
 time, and only allow file writes after reviewing the proposed manifest,
