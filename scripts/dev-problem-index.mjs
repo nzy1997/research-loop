@@ -4,6 +4,8 @@ import { mkdir, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { startService as startLocalAutoresearchService } from "./local-autoresearch-service.mjs";
+
 const ignoredRoots = new Set([".generated", ".git", "node_modules", ".next", ".vinext", "dist", ".wrangler"]);
 const RESEARCH_INDEX_FILENAMES = new Set([
   "problem.json",
@@ -152,36 +154,50 @@ export function runIndexBuild(rootDir, spawnFn = spawn) {
   });
 }
 
-export async function main({ rootDir = process.cwd() } = {}) {
+export async function main({ rootDir = process.cwd(), runIndexBuildFn = runIndexBuild, watchProblemFilesFn = watchProblemFiles, startService = startLocalAutoresearchService, spawnFn = spawn, processRef = process, environment = process.env } = {}) {
   const resolvedRootDir = resolve(rootDir);
 
-  await runIndexBuild(resolvedRootDir);
+  await runIndexBuildFn(resolvedRootDir);
 
   let timer;
-  const watcher = await watchProblemFiles({
+  const watcher = await watchProblemFilesFn({
     rootDir: resolvedRootDir,
     onChange() {
       clearTimeout(timer);
       timer = setTimeout(() => {
-        runIndexBuild(resolvedRootDir).catch((error) => console.error(error.message));
+        runIndexBuildFn(resolvedRootDir).catch((error) => console.error(error.message));
       }, 150);
     },
   });
 
-  const child = spawn("vinext", ["dev"], {
+  let service;
+  try { service = await startService({ rootDir: resolvedRootDir }); } catch (error) {
+    watcher.close();
+    clearTimeout(timer);
+    throw error;
+  }
+  const child = spawnFn("vinext", ["dev"], {
     cwd: resolvedRootDir,
-    env: { ...process.env, WRANGLER_LOG_PATH: ".wrangler/wrangler.log" },
+    env: { ...environment, AUTORESEARCH_CAPABILITY_TOKEN: service.token, AUTORESEARCH_SERVICE_ORIGIN: service.origin, WRANGLER_LOG_PATH: ".wrangler/wrangler.log" },
     stdio: "inherit",
   });
 
+  let stopped = false;
+  const stop = (signal) => {
+    if (stopped) return;
+    stopped = true;
+    Promise.resolve(service.close()).catch((error) => console.error(error.message));
+    child.kill(signal);
+  };
   for (const signal of ["SIGINT", "SIGTERM"]) {
-    process.on(signal, () => child.kill(signal));
+    processRef.on(signal, () => stop(signal));
   }
 
   child.on("exit", (code, signal) => {
     watcher.close();
     clearTimeout(timer);
-    process.exitCode = code ?? (signal ? 1 : 0);
+    Promise.resolve(service.close()).catch((error) => console.error(error.message));
+    processRef.exitCode = code ?? (signal ? 1 : 0);
   });
 }
 

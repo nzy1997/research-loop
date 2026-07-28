@@ -6,7 +6,8 @@ import { join } from "node:path";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 
-import { ensureProblemWatchDir, watchProblemFiles } from "../scripts/dev-problem-index.mjs";
+import { ensureProblemWatchDir, main, watchProblemFiles } from "../scripts/dev-problem-index.mjs";
+import { buildAutoresearchProxy } from "../vite.config.ts";
 
 async function waitFor(predicate) {
   for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -45,6 +46,64 @@ test("dev index builds reserve the showcase problem ID", async () => {
     args: ["scripts/build-problem-index.mjs", "--reserve-id", "Prob-000"],
     options: { cwd: "/tmp/research-loop-dev-root", stdio: "inherit" },
   }]);
+});
+
+test("dev supervision starts the service before vinext, scopes its capability, and closes both children", async () => {
+  const calls = [];
+  const signals = new EventEmitter();
+  const serviceChild = { closeCalls: 0, async close() { this.closeCalls += 1; } };
+  const vinext = new EventEmitter();
+  vinext.kill = (signal) => { calls.push({ kill: signal }); };
+  await main({
+    rootDir: "/tmp/research-loop-dev-root",
+    runIndexBuildFn: async () => calls.push("index"),
+    watchProblemFilesFn: async () => ({ close() { calls.push("watch-close"); } }),
+    startService: async () => { calls.push("service"); return { origin: "http://127.0.0.1:9123", token: "capability", close: serviceChild.close.bind(serviceChild) }; },
+    spawnFn(command, args, options) { calls.push({ command, args, options }); return vinext; },
+    processRef: signals,
+    environment: { PATH: "/test/bin" },
+  });
+  assert.equal(calls[1], "service");
+  assert.deepEqual(calls[2], {
+    command: "vinext",
+    args: ["dev"],
+    options: {
+      cwd: "/tmp/research-loop-dev-root",
+      env: { AUTORESEARCH_CAPABILITY_TOKEN: "capability", AUTORESEARCH_SERVICE_ORIGIN: "http://127.0.0.1:9123", PATH: "/test/bin", WRANGLER_LOG_PATH: ".wrangler/wrangler.log" },
+      stdio: "inherit",
+    },
+  });
+  signals.emit("SIGINT");
+  await delay(0);
+  assert.deepEqual(calls.at(-1), { kill: "SIGINT" });
+  assert.equal(serviceChild.closeCalls, 1);
+  signals.emit("SIGTERM");
+  await delay(0);
+  assert.equal(serviceChild.closeCalls, 1);
+});
+
+test("dev supervision does not launch vinext when service startup fails", async () => {
+  let spawned = false;
+  await assert.rejects(() => main({
+    rootDir: "/tmp/research-loop-dev-root",
+    runIndexBuildFn: async () => {},
+    watchProblemFilesFn: async () => ({ close() {} }),
+    startService: async () => { throw new Error("service unavailable"); },
+    spawnFn() { spawned = true; },
+    processRef: new EventEmitter(),
+  }), /service unavailable/);
+  assert.equal(spawned, false);
+});
+
+test("Vite proxies only local autoresearch routes and overwrites the browser capability", () => {
+  assert.equal(buildAutoresearchProxy({}), undefined);
+  assert.deepEqual(buildAutoresearchProxy({ origin: "http://127.0.0.1:9123", token: "capability" }), {
+    "/__local/autoresearch": {
+      target: "http://127.0.0.1:9123",
+      changeOrigin: true,
+      headers: { "x-research-loop-capability": "capability" },
+    },
+  });
 });
 
 test("watches the problems/ tree without recursive repo-wide watchers", async (t) => {

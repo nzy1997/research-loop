@@ -16,6 +16,7 @@
 	migration-verify \
 	problem-import-autoqec-css-distance problem-import-verify \
 	problem-index problem-publish \
+	autoresearch-service \
 	zotero-plugin-test zotero-plugin
 
 help:
@@ -42,6 +43,7 @@ help:
 	@echo '  make problem-import-verify ID=Prob-001                         verify a committed imported problem without reading AutoQEC'
 	@echo '  make problem-index                                              refresh the generated problem index'
 	@echo '  make problem-publish STAGE=".generated/problem-staging/<run>/Prob-NNN" ID=Prob-NNN  publish one validated staged draft'
+	@echo '  make autoresearch-service                       serve local-only autoresearch preparation diagnostics'
 	@echo '  make zotero-plugin-test                         type-check and test the Zotero integration'
 	@echo '  make zotero-plugin                              test and build the installable Zotero XPI'
 
@@ -124,6 +126,9 @@ problem-publish: node_modules/.package-lock.json
 		exit 2; \
 	fi
 	@npm run --silent problem:publish -- --stage "$(STAGE)" --id "$(ID)"
+
+autoresearch-service: node_modules/.package-lock.json
+	npm run autoresearch:service
 
 node_modules/.package-lock.json: package-lock.json
 	npm ci
