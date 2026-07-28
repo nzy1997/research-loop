@@ -95,6 +95,21 @@ test("dev supervision does not launch vinext when service startup fails", async 
   assert.equal(spawned, false);
 });
 
+test("dev supervision closes the service when watcher startup fails", async () => {
+  let spawned = false;
+  const service = { closes: 0, async close() { this.closes += 1; } };
+  await assert.rejects(() => main({
+    rootDir: "/tmp/research-loop-dev-root",
+    runIndexBuildFn: async () => {},
+    startService: async () => ({ origin: "http://127.0.0.1:9123", token: "capability", close: service.close.bind(service) }),
+    watchProblemFilesFn: async () => { throw new Error("watch unavailable"); },
+    spawnFn() { spawned = true; },
+    processRef: new EventEmitter(),
+  }), /watch unavailable/);
+  assert.equal(service.closes, 1);
+  assert.equal(spawned, false);
+});
+
 test("Vite proxies only local autoresearch routes and overwrites the browser capability", () => {
   assert.equal(buildAutoresearchProxy({}), undefined);
   assert.deepEqual(buildAutoresearchProxy({ origin: "http://127.0.0.1:9123", token: "capability" }), {

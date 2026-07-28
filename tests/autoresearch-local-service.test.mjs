@@ -124,6 +124,32 @@ test("concurrent prepare requests reserve one job before asynchronous creation",
   ]);
 });
 
+test("releases a reservation when its latest persisted job state is terminal", async (t) => {
+  const rootDir = await mkdtemp(join(tmpdir(), "autoresearch-local-service-"));
+  t.after(() => rm(rootDir, { recursive: true, force: true }));
+  const jobs = new Map();
+  const calls = { create: 0, enqueue: 0 };
+  const jobStore = {
+    async create(value) {
+      calls.create += 1;
+      const created = job({ ...value, jobId: calls.create === 1 ? "ARJ-20260728T080001Z-cafebabe" : "ARJ-20260728T080002Z-01234567" });
+      jobs.set(created.jobId, created);
+      return { ...created };
+    },
+    async read(jobId) { return { ...jobs.get(jobId) }; },
+    async list() { return [...jobs.values()].map((item) => ({ ...item })); },
+  };
+  const scheduler = { enqueue(value) { calls.enqueue += 1; return value; }, resumeAfterInput() {} };
+  const running = await startLocalAutoresearchService({ rootDir, token: TOKEN, scheduler, jobStore });
+  t.after(() => running.close());
+  const first = await request(running.origin, `/__local/autoresearch/problems/${PROBLEM}/prepare`, { method: "POST", body: "{}" });
+  assert.equal((await first.json()).jobId, "ARJ-20260728T080001Z-cafebabe");
+  jobs.get("ARJ-20260728T080001Z-cafebabe").state = "failed";
+  const second = await request(running.origin, `/__local/autoresearch/problems/${PROBLEM}/prepare`, { method: "POST", body: "{}" });
+  assert.equal((await second.json()).jobId, "ARJ-20260728T080002Z-01234567");
+  assert.deepEqual(calls, { create: 2, enqueue: 2 });
+});
+
 test("exposes only the active bounded question and downloads event logs as text", async (t) => {
   const { origin, rootDir } = await service(t, { initial: job({ state: "needs_input", secret: TOKEN, path: "/private/path", stderr: "nope" }) });
   await mkdir(join(rootDir, "jobs", JOB), { recursive: true });

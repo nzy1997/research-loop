@@ -160,17 +160,28 @@ export async function main({ rootDir = process.cwd(), runIndexBuildFn = runIndex
   await runIndexBuildFn(resolvedRootDir);
 
   const service = await startService({ rootDir: resolvedRootDir, privateDataRoot: environment.AUTORESEARCH_PRIVATE_DATA_ROOT });
+  let serviceClose;
+  const closeService = () => {
+    serviceClose ??= Promise.resolve(service.close()).catch((error) => console.error(error.message));
+    return serviceClose;
+  };
 
   let timer;
-  const watcher = await watchProblemFilesFn({
-    rootDir: resolvedRootDir,
-    onChange() {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        runIndexBuildFn(resolvedRootDir).catch((error) => console.error(error.message));
-      }, 150);
-    },
-  });
+  let watcher;
+  try {
+    watcher = await watchProblemFilesFn({
+      rootDir: resolvedRootDir,
+      onChange() {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          runIndexBuildFn(resolvedRootDir).catch((error) => console.error(error.message));
+        }, 150);
+      },
+    });
+  } catch (error) {
+    await closeService();
+    throw error;
+  }
 
   const { AUTORESEARCH_PRIVATE_DATA_ROOT: _privateDataRoot, ...vinextEnvironment } = environment;
   const child = spawnFn("vinext", ["dev"], {
@@ -183,7 +194,7 @@ export async function main({ rootDir = process.cwd(), runIndexBuildFn = runIndex
   const stop = (signal) => {
     if (stopped) return;
     stopped = true;
-    Promise.resolve(service.close()).catch((error) => console.error(error.message));
+    closeService();
     child.kill(signal);
   };
   for (const signal of ["SIGINT", "SIGTERM"]) {
@@ -193,7 +204,7 @@ export async function main({ rootDir = process.cwd(), runIndexBuildFn = runIndex
   child.on("exit", (code, signal) => {
     watcher.close();
     clearTimeout(timer);
-    Promise.resolve(service.close()).catch((error) => console.error(error.message));
+    closeService();
     processRef.exitCode = code ?? (signal ? 1 : 0);
   });
 }
