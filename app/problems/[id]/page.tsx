@@ -13,6 +13,8 @@ import { notFound } from "next/navigation";
 import { AssessmentPanel } from "./assessment-panel";
 import { StaticAutoresearchPanel } from "./static-autoresearch-panel";
 
+declare const __AUTORESEARCH_SIDECAR_AVAILABLE__: boolean;
+
 export default async function ProblemDetailPage({
   params,
 }: {
@@ -34,10 +36,7 @@ export default async function ProblemDetailPage({
     researchRecord,
     diagnostics: researchDiagnostics,
   });
-  const sidecarAvailable = Boolean(
-    process.env.AUTORESEARCH_SERVICE_ORIGIN
-      && process.env.AUTORESEARCH_CAPABILITY_TOKEN,
-  );
+  const sidecarAvailable = __AUTORESEARCH_SIDECAR_AVAILABLE__;
 
   if (isStaticResearchExampleProblem(problem.id)) {
     const example = getStaticResearchExample(problem.id);

@@ -36,7 +36,7 @@
     "test:e2e:autoresearch": "playwright test -c playwright.autoresearch.config.ts",
     "test:e2e": "playwright test",
     "test:e2e:assessment": "playwright test --config playwright.assessment.config.ts",
-    "test": "npm run lint && npm run test:unit:problems && npm run test:unit && npm run build && npm run test:rendered && npm run test:pages && npm run test:e2e && npm run build",
+    "test": "npm run lint && npm run test:unit:problems && npm run test:unit && npm run build && npm run test:rendered && npm run test:pages && npm run test:e2e && npm run test:e2e:assessment && npm run test:e2e:autoresearch && npm run build",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {

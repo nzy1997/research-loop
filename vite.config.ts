@@ -107,11 +107,13 @@ export default defineConfig(async () => {
   const { cloudflare } = await import("@cloudflare/vite-plugin");
   const localAssessmentTarget = process.env.LOCAL_ASSESSMENT_SERVICE_URL;
   const localAssessmentToken = process.env.LOCAL_ASSESSMENT_PROXY_TOKEN;
+  const autoresearchOrigin = process.env.AUTORESEARCH_SERVICE_ORIGIN;
+  const autoresearchToken = process.env.AUTORESEARCH_CAPABILITY_TOKEN;
   const proxy = buildLocalServiceProxy({
     assessmentTarget: localAssessmentTarget,
     assessmentToken: localAssessmentToken,
-    autoresearchOrigin: process.env.AUTORESEARCH_SERVICE_ORIGIN,
-    autoresearchToken: process.env.AUTORESEARCH_CAPABILITY_TOKEN,
+    autoresearchOrigin,
+    autoresearchToken,
   });
   const server = {
     ...(isCodexSeatbeltSandbox ? { watch: { useFsEvents: false, usePolling: true } } : {}),
@@ -119,6 +121,9 @@ export default defineConfig(async () => {
   };
 
   return {
+    define: {
+      __AUTORESEARCH_SIDECAR_AVAILABLE__: JSON.stringify(Boolean(autoresearchOrigin && autoresearchToken)),
+    },
     server: Object.keys(server).length ? server : undefined,
     plugins: [
       vinext(),
