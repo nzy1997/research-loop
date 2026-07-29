@@ -43,7 +43,7 @@ test("indexes five specified quantum-harness mirrors without promoting them", as
 
 - [ ] **Step 2: Run it to verify it fails.**
 
-Run: \`node --test tests/quantum-harness-import.test.mjs\`  
+Run: \`node --test tests/quantum-harness-import.test.mjs\`
 Expected: FAIL because no \`Prob-124\` through \`Prob-128\` records exist.
 
 - [ ] **Step 3: Add the smallest source-consistency assertion.**
@@ -112,7 +112,7 @@ Each \`problem.md\` must include the original issue URL, current source-package 
 
 - [ ] **Step 4: Run the new import test.**
 
-Run: \`node --test tests/quantum-harness-import.test.mjs\`  
+Run: \`node --test tests/quantum-harness-import.test.mjs\`
 Expected: PASS.
 
 - [ ] **Step 5: Commit the records.**
@@ -147,10 +147,10 @@ Append \`tests/quantum-harness-import.test.mjs\` to the first \`node --test\` in
 
 - [ ] **Step 3: Run the targeted test and full project suite.**
 
-Run: \`node --test tests/quantum-harness-import.test.mjs\`  
+Run: \`node --test tests/quantum-harness-import.test.mjs\`
 Expected: PASS.
 
-Run: \`npm test\`  
+Run: \`npm test\`
 Expected: PASS, including index build, app build, rendered HTML, and Pages showcase checks.
 
 - [ ] **Step 4: Commit the verification wiring.**
