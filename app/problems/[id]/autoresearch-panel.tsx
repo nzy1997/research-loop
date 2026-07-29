@@ -72,7 +72,7 @@ export function AutoresearchPanel({
     if (!localMode || view.pollAfterMs === null) return undefined;
     const poll = window.setTimeout(() => void refresh(), view.pollAfterMs);
     return () => window.clearTimeout(poll);
-  }, [refresh, localMode, view.pollAfterMs]);
+  }, [refresh, localMode, view.pollAfterMs, serviceState?.jobId, serviceState?.state]);
 
   useEffect(() => () => controller.current?.abort(), []);
 

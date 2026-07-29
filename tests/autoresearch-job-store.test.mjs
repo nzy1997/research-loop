@@ -53,6 +53,18 @@ test("rejects skipped and backward states while retaining immutable lineage", as
   });
 });
 
+test("allows preparation to pause for input before preflight", async (t) => {
+  const { store } = await fixture(t);
+  const job = await store.create({ problemId: "Prob-007", kind: "preparation" });
+
+  for (const state of ["scaffolding", "building_benchmark", "preparing_datasets", "needs_input"]) {
+    await store.transition(job.jobId, state);
+  }
+
+  assert.equal((await store.read(job.jobId)).state, "needs_input");
+  await assert.rejects(() => store.transition(job.jobId, "preflight"), /transition/i);
+});
+
 test("persists complete job snapshots atomically and monotonically numbered events", async (t) => {
   const { rootDir, store } = await fixture(t);
   const job = await store.create({ problemId: "Prob-007", kind: "preparation" });

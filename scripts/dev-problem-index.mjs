@@ -139,12 +139,27 @@ export async function watchProblemFiles({ rootDir, onChange, watchFn = watch }) 
   };
 }
 
-export function runIndexBuild(rootDir, spawnFn = spawn) {
+export function runIndexBuild(rootDir, spawnFn = spawn, { outputRootDir = rootDir } = {}) {
   return new Promise((resolveBuild, rejectBuild) => {
+    const resolvedRootDir = resolve(rootDir);
+    const resolvedOutputRootDir = resolve(outputRootDir);
+    const args = ["scripts/build-problem-index.mjs", "--reserve-id", "Prob-000"];
+    if (resolvedRootDir !== resolvedOutputRootDir) {
+      args.splice(
+        1,
+        0,
+        "--root",
+        resolvedRootDir,
+        "--out",
+        join(resolvedOutputRootDir, ".generated", "problem-index.json"),
+        "--research-out",
+        join(resolvedOutputRootDir, ".generated", "research-index.json"),
+      );
+    }
     const builder = spawnFn(
       process.execPath,
-      ["scripts/build-problem-index.mjs", "--reserve-id", "Prob-000"],
-      { cwd: rootDir, stdio: "inherit" },
+      args,
+      { cwd: resolvedOutputRootDir, stdio: "inherit" },
     );
     builder.on("error", rejectBuild);
     builder.on("exit", (code) => {
@@ -156,10 +171,11 @@ export function runIndexBuild(rootDir, spawnFn = spawn) {
 
 export async function main({ rootDir = process.cwd(), runIndexBuildFn = runIndexBuild, watchProblemFilesFn = watchProblemFiles, startService = startLocalAutoresearchService, spawnFn = spawn, processRef = process, environment = process.env } = {}) {
   const resolvedRootDir = resolve(rootDir);
+  const workspaceRootDir = resolve(environment.AUTORESEARCH_WORKSPACE_ROOT ?? resolvedRootDir);
 
-  await runIndexBuildFn(resolvedRootDir);
+  await runIndexBuildFn(workspaceRootDir, spawnFn, { outputRootDir: resolvedRootDir });
 
-  const service = await startService({ rootDir: resolvedRootDir, privateDataRoot: environment.AUTORESEARCH_PRIVATE_ROOT });
+  const service = await startService({ rootDir: workspaceRootDir, privateDataRoot: environment.AUTORESEARCH_PRIVATE_ROOT });
   let serviceClose;
   const closeService = () => {
     serviceClose ??= Promise.resolve(service.close()).catch((error) => console.error(error.message));
@@ -170,11 +186,11 @@ export async function main({ rootDir = process.cwd(), runIndexBuildFn = runIndex
   let watcher;
   try {
     watcher = await watchProblemFilesFn({
-      rootDir: resolvedRootDir,
+      rootDir: workspaceRootDir,
       onChange() {
         clearTimeout(timer);
         timer = setTimeout(() => {
-          runIndexBuildFn(resolvedRootDir).catch((error) => console.error(error.message));
+          runIndexBuildFn(workspaceRootDir, spawnFn, { outputRootDir: resolvedRootDir }).catch((error) => console.error(error.message));
         }, 150);
       },
     });
@@ -183,8 +199,22 @@ export async function main({ rootDir = process.cwd(), runIndexBuildFn = runIndex
     throw error;
   }
 
-  const { AUTORESEARCH_PRIVATE_ROOT: _privateRoot, ...vinextEnvironment } = environment;
-  const child = spawnFn("vinext", ["dev"], {
+  const devHost = environment.AUTORESEARCH_DEV_HOST;
+  const devPort = environment.AUTORESEARCH_DEV_PORT;
+  const vinextEnvironment = { ...environment };
+  for (const key of [
+    "AUTORESEARCH_PRIVATE_ROOT",
+    "AUTORESEARCH_WORKSPACE_ROOT",
+    "AUTORESEARCH_CODEX_PATH",
+    "AUTORESEARCH_SCHEMA_PATH",
+    "AUTORESEARCH_INDEX_OUTPUT_ROOT",
+    "AUTORESEARCH_DEV_HOST",
+    "AUTORESEARCH_DEV_PORT",
+  ]) delete vinextEnvironment[key];
+  const vinextArgs = ["dev"];
+  if (typeof devHost === "string" && devHost.length > 0) vinextArgs.push("--host", devHost);
+  if (typeof devPort === "string" && devPort.length > 0) vinextArgs.push("--port", devPort);
+  const child = spawnFn("vinext", vinextArgs, {
     cwd: resolvedRootDir,
     env: { ...vinextEnvironment, AUTORESEARCH_CAPABILITY_TOKEN: service.token, AUTORESEARCH_SERVICE_ORIGIN: service.origin, WRANGLER_LOG_PATH: ".wrangler/wrangler.log" },
     stdio: "inherit",

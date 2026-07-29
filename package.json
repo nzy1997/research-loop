@@ -33,6 +33,7 @@
     "test:autoresearch:preparation": "node --test tests/autoresearch-preparation-contract.test.mjs tests/autoresearch-paths.test.mjs tests/autoresearch-process.test.mjs tests/autoresearch-codex-preparation.test.mjs tests/autoresearch-preflight.test.mjs tests/autoresearch-artifact-store.test.mjs tests/autoresearch-job-store.test.mjs tests/autoresearch-scheduler.test.mjs tests/autoresearch-preparation-worker.test.mjs tests/autoresearch-local-service.test.mjs tests/autoresearch-view-model.test.mjs",
     "test:pages": "npm run pages:build && node --test tests/pages-showcase.test.mjs",
     "test:rendered": "node --test tests/rendered-html.test.mjs tests/built-static-assets.test.mjs",
+    "test:e2e:autoresearch": "playwright test -c playwright.autoresearch.config.ts",
     "test:e2e": "playwright test",
     "test": "npm run lint && npm run test:unit:problems && npm run test:unit && npm run build && npm run test:rendered && npm run test:pages && npm run test:e2e && npm run build",
     "db:generate": "drizzle-kit generate"
