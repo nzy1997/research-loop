@@ -2,7 +2,7 @@
  * The trust boundary of this repository is enforced by code — the validator,
  * the resolver, the projection — but an agent only reaches that code if its
  * instructions send it there. These tests are the static half of that
- * guarantee: they pin what `AGENTS.md`, `CLAUDE.md`, and the three local skills
+ * guarantee: they pin what `AGENTS.md`, `CLAUDE.md`, and the local skills
  * must *say*, so the sentences the boundary depends on cannot be dropped,
  * softened, or edited away without a test failing.
  *
@@ -42,6 +42,7 @@ const SKILLS_ROOT = path.join(REPO_ROOT, "skills");
 /** The complete set of local skills this repository commits. */
 const SKILL_NAMES = [
   "add-problem",
+  "assess-research-problem",
   "capture-chat-draft",
   "complete-gaps",
   "conference-survey",
@@ -529,8 +530,178 @@ const SCREEN_PAPER: readonly Clause[] = [
   { requirement: "does not modify repository content", in: "body", pattern: /Do not modify/i },
 ];
 
+/** The plan's requirements for `assess-research-problem`, clause by clause. */
+const ASSESS_RESEARCH_PROBLEM: readonly Clause[] = [
+  {
+    requirement: "triggers when judging whether a research problem is worth doing",
+    in: "description",
+    pattern: /worth doing/i,
+  },
+  {
+    requirement: "keeps the skill read-only",
+    in: "body",
+    pattern: /read-only/i,
+  },
+  {
+    requirement: "runs the repository resolver before evidence-dependent claims",
+    in: "body",
+    pattern: /make knowledge-resolve QUERY="<the candidate research question>"/,
+  },
+  {
+    requirement: "on ambiguous resolver output, returns needs_input in structured mode",
+    in: "body",
+    pattern: /`needs_input`[^.\n]*ambiguous/i,
+  },
+  {
+    requirement: "on no-match, marks evidence-dependent dimensions unknown",
+    in: "body",
+    pattern: /no-match[^.\n]*unknown/i,
+  },
+  {
+    requirement: "never uses drafts or literature as learned knowledge fallback",
+    in: "body",
+    pattern: /Never use `drafts\/` as learned knowledge\. Never use `literature\/` as learned knowledge\./i,
+  },
+  {
+    requirement: "pins the permitted verdict labels for structured output",
+    in: "body",
+    pattern: /Allowed verdict labels: `DO_NOW`, `REFRAME`, `NOT_AUTORESEARCH`, `DEFER`\./,
+  },
+  {
+    requirement: "pins the permitted autoresearch recommendation values for structured output",
+    in: "body",
+    pattern: /Allowed autoresearch recommendation values: `proceed`, `reframe`, `reject`, `defer`\./,
+  },
+  {
+    requirement: "supports structured output when Codex receives the schema",
+    in: "body",
+    pattern: /structured output schema/i,
+  },
+  {
+    requirement: "keeps Markdown sections for normal conversation mode",
+    in: "body",
+    pattern: /Markdown sections/i,
+  },
+  {
+    requirement: "keeps P equals NP as a scoring outcome rather than a blacklist",
+    in: "body",
+    pattern: /P = NP[^.\n]*not[^.\n]*blacklist/i,
+  },
+  {
+    requirement: "keeps the 5 minute runtime target soft",
+    in: "body",
+    pattern: /5 minutes[^.\n]*not a hard limit/i,
+  },
+  {
+    requirement: "triggers on judging whether a research problem is worth doing",
+    in: "description",
+    pattern: /worth (doing|pursuing)/i,
+  },
+  {
+    requirement: "triggers on judging autoresearch fit",
+    in: "description",
+    pattern: /autoresearch/i,
+  },
+  {
+    requirement: "separates research value from autoresearch suitability",
+    in: "body",
+    pattern: /research value[^.\n]*autoresearch suitability/i,
+  },
+  {
+    requirement: "requires the read-knowledge resolver before research facts",
+    in: "body",
+    pattern: /make knowledge-resolve QUERY="<the candidate research question>"/,
+  },
+  {
+    requirement: "does not use drafts as a fallback",
+    in: "body",
+    pattern: /Never use `drafts\/`[^.\n]*learned knowledge/i,
+  },
+  {
+    requirement: "does not use literature as learned knowledge",
+    in: "body",
+    pattern: /Never use `literature\/`[^.\n]*learned knowledge/i,
+  },
+  {
+    requirement: "is read-only",
+    in: "body",
+    pattern: /read-only/i,
+  },
+  {
+    requirement: "does not answer the research problem",
+    in: "body",
+    pattern: /(do not|don't|never)[^.\n]*answer[^.\n]*research (question|problem)/i,
+  },
+  {
+    requirement: "does not create problem records",
+    in: "body",
+    pattern: /(do not|don't|never)[^.\n]*(create|write|update)[^.\n]*`problems\/`/i,
+  },
+  {
+    requirement: "scores research value on a 0-100 axis",
+    in: "body",
+    pattern: /`V`[^.\n]*0[^.\n]*100/i,
+  },
+  {
+    requirement: "scores autoresearch suitability on a 0-100 axis",
+    in: "body",
+    pattern: /`A`[^.\n]*0[^.\n]*100/i,
+  },
+  {
+    requirement: "uses the harmonic mean for the combined score",
+    in: "body",
+    pattern: /harmonic mean/i,
+  },
+  {
+    requirement: "contains the runtime soft penalty formula",
+    in: "body",
+    pattern: /T = clamp\(5 - log2\(max\(t, 5\) \/ 5\), 0, 5\)/,
+  },
+  {
+    requirement: "states five minutes is not a hard limit",
+    in: "body",
+    pattern: /5 minutes[^.\n]*not a hard limit/i,
+  },
+  {
+    requirement: "keeps unknowns as intervals",
+    in: "body",
+    pattern: /unknown[^.\n]*interval/i,
+  },
+  {
+    requirement: "does not use any dimension as a hard veto",
+    in: "body",
+    pattern: /No individual dimension[^.\n]*hard veto/i,
+  },
+  {
+    requirement: "handles P equals NP as high value and low suitability",
+    in: "body",
+    pattern: /P = NP[^.\n]*high research value[^.\n]*low autoresearch suitability/i,
+  },
+  {
+    requirement: "returns the normalized problem section",
+    in: "body",
+    pattern: /`Normalized problem`/,
+  },
+  {
+    requirement: "returns the verdict section",
+    in: "body",
+    pattern: /`Verdict`/,
+  },
+  {
+    requirement: "returns exactly one largest bottleneck",
+    in: "body",
+    pattern: /`Largest bottleneck`[^.\n]*exactly one/i,
+  },
+  {
+    requirement: "returns exactly one recommended reframe",
+    in: "body",
+    pattern: /`Recommended reframe`[^.\n]*exactly one/i,
+  },
+];
+
 const CLAUSES: Readonly<Record<SkillName, readonly Clause[]>> = {
   "add-problem": ADD_PROBLEM,
+  "assess-research-problem": ASSESS_RESEARCH_PROBLEM,
   "capture-chat-draft": CAPTURE_CHAT_DRAFT,
   "complete-gaps": COMPLETE_GAPS,
   "conference-survey": CONFERENCE_SURVEY,

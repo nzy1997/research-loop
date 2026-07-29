@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://research-loop.local/schemas/research-problem-assessment.schema.json",
+  "title": "Research Loop Research Problem Assessment Output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["outcome", "language", "knowledgeResolution", "assessment", "clarification"],
+  "properties": {
+    "outcome": { "enum": ["assessment", "needs_input"] },
+    "language": { "type": "string", "minLength": 2 },
+    "knowledgeResolution": { "$ref": "#/$defs/knowledgeResolution" },
+    "assessment": {
+      "anyOf": [{ "$ref": "#/$defs/assessment" }, { "type": "null" }]
+    },
+    "clarification": {
+      "anyOf": [{ "$ref": "#/$defs/clarification" }, { "type": "null" }]
+    }
+  },
+  "$defs": {
+    "scoreInterval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min", "estimate", "max"],
+      "properties": {
+        "min": { "type": "number", "minimum": 0, "maximum": 100 },
+        "estimate": { "type": "number", "minimum": 0, "maximum": 100 },
+        "max": { "type": "number", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "dimensionScoreInterval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min", "estimate", "max"],
+      "properties": {
+        "min": { "type": "number", "minimum": 0, "maximum": 5 },
+        "estimate": { "type": "number", "minimum": 0, "maximum": 5 },
+        "max": { "type": "number", "minimum": 0, "maximum": 5 }
+      }
+    },
+    "knowledgeResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query", "status", "topic", "orderedFiles"],
+      "properties": {
+        "query": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["match", "no-match", "ambiguous"] },
+        "topic": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+        "orderedFiles": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "evidenceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "path", "locator", "summary"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["knowledge", "problem", "resolver", "unknown"] },
+        "path": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+        "locator": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+        "summary": { "type": "string" }
+      }
+    },
+    "dimension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "weight", "score", "evidenceState", "rationale", "evidenceRefs"],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "weight": { "type": "number" },
+        "score": { "$ref": "#/$defs/dimensionScoreInterval" },
+        "evidenceState": { "enum": ["supported", "inferred", "unknown"] },
+        "rationale": { "type": "string" },
+        "evidenceRefs": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "normalizedProblem",
+        "verdict",
+        "recommendation",
+        "scores",
+        "confidence",
+        "dimensions",
+        "largestBottleneck",
+        "recommendedReframe",
+        "informationGaps",
+        "evidence"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "normalizedProblem": { "type": "string", "minLength": 1 },
+        "verdict": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["label", "provisional", "possibleLabels"],
+          "properties": {
+            "label": { "enum": ["DO_NOW", "REFRAME", "NOT_AUTORESEARCH", "DEFER"] },
+            "provisional": { "type": "boolean" },
+            "possibleLabels": {
+              "type": "array",
+              "items": { "enum": ["DO_NOW", "REFRAME", "NOT_AUTORESEARCH", "DEFER"] },
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          }
+        },
+        "recommendation": { "enum": ["proceed", "reframe", "reject", "defer"] },
+        "scores": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["researchValue", "autoresearchSuitability", "combined"],
+          "properties": {
+            "researchValue": { "$ref": "#/$defs/scoreInterval" },
+            "autoresearchSuitability": { "$ref": "#/$defs/scoreInterval" },
+            "combined": { "$ref": "#/$defs/scoreInterval" }
+          }
+        },
+        "confidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["level", "rationale"],
+          "properties": {
+            "level": { "enum": ["high", "medium", "low"] },
+            "rationale": { "type": "string" }
+          }
+        },
+        "dimensions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["researchValue", "autoresearchSuitability"],
+          "properties": {
+            "researchValue": { "type": "array", "items": { "$ref": "#/$defs/dimension" } },
+            "autoresearchSuitability": { "type": "array", "items": { "$ref": "#/$defs/dimension" } }
+          }
+        },
+        "largestBottleneck": { "type": "string", "minLength": 1 },
+        "recommendedReframe": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "text"],
+          "properties": {
+            "kind": { "enum": ["bounded", "none"] },
+            "text": { "type": "string" }
+          }
+        },
+        "informationGaps": { "type": "array", "items": { "type": "string" } },
+        "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidenceRef" } }
+      }
+    },
+    "clarification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query", "reason", "alternatives"],
+      "properties": {
+        "query": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string" },
+        "alternatives": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["page", "topic", "title", "matchKind"],
+            "properties": {
+              "page": { "type": "string", "minLength": 1 },
+              "topic": { "type": "string", "minLength": 1 },
+              "title": { "type": "string", "minLength": 1 },
+              "matchKind": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    }
+  }
+}

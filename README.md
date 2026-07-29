@@ -57,6 +57,13 @@ dashboard links to the knowledge copy at `/research-loop/knowledge/` inside
 that artifact. The console snapshot is script-free static HTML; it is a
 showcase of the example, not a deployment of the local console.
 
+## Local assessment reports
+
+When running the app locally, a problem page can start a read-only Codex CLI
+assessment and write immutable local artifacts under the problem directory. See
+[`docs/local-assessments.md`](docs/local-assessments.md) for the workflow,
+artifact layout, and manual smoke test.
+
 ## The trust boundary
 
 Three trees, three different levels of trust. The separation is physical, so

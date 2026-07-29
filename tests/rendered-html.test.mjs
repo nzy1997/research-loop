@@ -261,7 +261,22 @@ test("server-renders the generic problem detail shell for non-example problems",
   assert.match(html, /<p class="eyebrow">Prob-017<\/p>/);
   assert.match(html, /<h1>Fresh Hamiltonian gate<\/h1>/);
   assert.match(html, /<p class="detail-summary">Interval arithmetic on held-out instances\.<\/p>/);
+  assert.match(html, /<section class="assessment-panel assessment-unavailable" aria-labelledby="assessment-heading">/);
+  assert.match(html, /Local assessment unavailable/);
   assert.match(html, /The detailed problem workspace will be designed next; this page currently locks the route, identity, and return path\./);
   assert.doesNotMatch(html, /[\u3400-\u9FFF]/u);
   assert.match(html, /<a href="\/" class="back-link">← Back to problems<\/a>/);
+});
+
+test("server-renders unavailable assessment copy for the static example detail shell", async () => {
+  const response = await renderFilesystemFixture(
+    { manifests: [{ ...acceptedFixture, id: "Prob-000" }] },
+    "/problems/Prob-000?fixture=filesystem",
+  );
+  assert.equal(response.status, 200);
+
+  const html = await response.text();
+  assert.match(html, /Example data - synthetic results for interface demonstration only\./);
+  assert.match(html, /<section class="assessment-panel assessment-unavailable" aria-labelledby="assessment-heading">/);
+  assert.match(html, /Local assessment unavailable/);
 });

@@ -10,6 +10,7 @@ import { createResearchRepository } from "@/lib/problems/research-repository.mjs
 import { buildProblemDetailResearchState } from "@/lib/problems/research-route-data.mjs";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AssessmentPanel } from "./assessment-panel";
 import { StaticAutoresearchPanel } from "./static-autoresearch-panel";
 
 export default async function ProblemDetailPage({
@@ -61,6 +62,7 @@ export default async function ProblemDetailPage({
         <StaticAutoresearchPanel />
 
         <p className="example-disclaimer">{example.manifest.disclaimer}</p>
+        <AssessmentPanel problemId={problem.id} />
 
         <dl className="research-metric-strip" aria-label="Research metrics">
           {ledger.cards.map((card) => (
@@ -137,6 +139,7 @@ export default async function ProblemDetailPage({
           </div>
         </header>
         <AutoresearchPanel problemId={problem.id} initialEligibility={problem.status === "qualifying" || problem.status === "accepted"} />
+        <AssessmentPanel problemId={problem.id} />
         <p className="example-disclaimer">{researchState.disclaimer}</p>
         <dl className="research-metric-strip" aria-label="Research metrics">
           {ledger.cards.map((card) => (
@@ -217,6 +220,7 @@ export default async function ProblemDetailPage({
       <h1>{problem.title}</h1>
       <p className="detail-summary">{problem.summary}</p>
       <AutoresearchPanel problemId={problem.id} initialEligibility={problem.status === "qualifying" || problem.status === "accepted"} />
+      <AssessmentPanel problemId={problem.id} />
       <section className="detail-panel" aria-labelledby="detail-status-heading">
         <h2 id="detail-status-heading">Problem detail</h2>
         <p>The detailed problem workspace will be designed next; this page currently locks the route, identity, and return path.</p>

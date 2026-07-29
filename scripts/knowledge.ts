@@ -3,7 +3,7 @@
  * CLI for the trusted knowledge tree.
  *
  *   knowledge.ts check
- *   knowledge.ts resolve --query <text>
+ *   knowledge.ts resolve --query <text> [--select-page <knowledge/...qmd>]
  *   knowledge.ts build
  *   knowledge.ts preview
  *
@@ -38,7 +38,7 @@ import {
 const USAGE = [
   "usage:",
   "  knowledge.ts check",
-  "  knowledge.ts resolve --query <text>",
+  "  knowledge.ts resolve --query <text> [--select-page <knowledge/...qmd>]",
   "  knowledge.ts build",
   "  knowledge.ts preview",
 ].join("\n");
@@ -47,13 +47,16 @@ const REPO_ROOT = path.resolve(fileURLToPath(import.meta.url), "..", "..");
 
 class UsageError extends Error {}
 
-/** The `--query` of a `resolve` invocation, or a usage error explaining why not. */
-function queryOf(args: readonly string[]): string {
+/** The options of a `resolve` invocation, or a usage error explaining why not. */
+function resolveOptionsOf(args: readonly string[]): { query: string; selectedPage?: string } {
   let values;
   try {
     ({ values } = parseArgs({
       args: [...args],
-      options: { query: { type: "string" } },
+      options: {
+        query: { type: "string" },
+        "select-page": { type: "string" },
+      },
       strict: true,
       allowPositionals: false,
     }));
@@ -63,7 +66,7 @@ function queryOf(args: readonly string[]): string {
   if (values.query === undefined) {
     throw new UsageError("resolve requires --query <text>");
   }
-  return values.query;
+  return { query: values.query, selectedPage: values["select-page"] };
 }
 
 async function main(argv: readonly string[]): Promise<void> {
@@ -84,7 +87,8 @@ async function main(argv: readonly string[]): Promise<void> {
       return;
     }
     case "resolve": {
-      const result = await resolveKnowledge(queryOf(rest), { repoRoot: REPO_ROOT });
+      const { query, selectedPage } = resolveOptionsOf(rest);
+      const result = await resolveKnowledge(query, { repoRoot: REPO_ROOT, selectedPage });
       console.log(JSON.stringify(result, null, 2));
       return;
     }

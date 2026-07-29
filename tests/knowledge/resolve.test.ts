@@ -438,29 +438,31 @@ test("a bundle prepends the whole root-to-target chain of indexes", async (t) =>
   });
 });
 
+const AMBIGUOUS_TREE = {
+  "index.qmd": qmd(
+    { title: "Root", description: "The root of the ambiguous fixture." },
+    indexBody(["beta/index.qmd", "alpha/index.qmd"]),
+  ),
+  "beta/index.qmd": qmd(
+    { title: "Beta topic", description: "Curated first, second alphabetically." },
+    indexBody(["note.qmd"]),
+  ),
+  "beta/note.qmd": qmd(
+    { title: "Kagome lattice", description: "One note.", categories: "[theory]" },
+    ["Nothing here."],
+  ),
+  "alpha/index.qmd": qmd(
+    { title: "Alpha topic", description: "Curated second, first alphabetically." },
+    indexBody(["note.qmd"]),
+  ),
+  "alpha/note.qmd": qmd(
+    { title: "Kagome lattice", description: "Another note.", categories: "[experiment]" },
+    ["Nothing here."],
+  ),
+};
+
 test("equally ranked matches in different topics are ambiguous, never guessed", async (t) => {
-  const repo = await makeTree(t, {
-    "index.qmd": qmd(
-      { title: "Root", description: "The root of the ambiguous fixture." },
-      indexBody(["beta/index.qmd", "alpha/index.qmd"]),
-    ),
-    "beta/index.qmd": qmd(
-      { title: "Beta topic", description: "Curated first, second alphabetically." },
-      indexBody(["note.qmd"]),
-    ),
-    "beta/note.qmd": qmd(
-      { title: "Kagome lattice", description: "One note.", categories: "[theory]" },
-      ["Nothing here."],
-    ),
-    "alpha/index.qmd": qmd(
-      { title: "Alpha topic", description: "Curated second, first alphabetically." },
-      indexBody(["note.qmd"]),
-    ),
-    "alpha/note.qmd": qmd(
-      { title: "Kagome lattice", description: "Another note.", categories: "[experiment]" },
-      ["Nothing here."],
-    ),
-  });
+  const repo = await makeTree(t, AMBIGUOUS_TREE);
   assert.equal((await validateKnowledge({ repoRoot: repo })).ok, true);
 
   const result = await resolveKnowledge("kagome lattice", { repoRoot: repo });
@@ -477,6 +479,39 @@ test("equally ranked matches in different topics are ambiguous, never guessed", 
   assert.deepEqual(
     result.alternatives.map((candidate) => `${candidate.topic} ${candidate.title}`),
     ["knowledge/beta/index.qmd Kagome lattice", "knowledge/alpha/index.qmd Kagome lattice"],
+  );
+});
+
+test("an explicit user selection materializes only that ambiguous candidate's bundle", async (t) => {
+  const repo = await makeTree(t, AMBIGUOUS_TREE);
+
+  const result = await resolveKnowledge("kagome lattice", {
+    repoRoot: repo,
+    selectedPage: "knowledge/alpha/note.qmd",
+  });
+
+  assert.ok(result.status === "match", `expected a selected match, got ${result.status}`);
+  assert.deepEqual(result.bundle, {
+    topic: "knowledge/alpha/index.qmd",
+    ancestorIndexes: ["knowledge/index.qmd", "knowledge/alpha/index.qmd"],
+    contentPages: ["knowledge/alpha/note.qmd"],
+    orderedFiles: [
+      "knowledge/index.qmd",
+      "knowledge/alpha/index.qmd",
+      "knowledge/alpha/note.qmd",
+    ],
+  });
+});
+
+test("a selected page is rejected when the query is no longer ambiguous", async (t) => {
+  const repo = await makeTree(t, TIER_TREE);
+
+  await assert.rejects(
+    resolveKnowledge("spin glass", {
+      repoRoot: repo,
+      selectedPage: "knowledge/terms/alias-exact.qmd",
+    }),
+    /selected page.*query is not ambiguous/i,
   );
 });
 

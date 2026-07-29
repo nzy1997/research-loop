@@ -22,6 +22,33 @@ export function buildAutoresearchProxy({ origin, token }: { origin?: string; tok
   };
 }
 
+export function buildLocalServiceProxy({
+  assessmentTarget,
+  assessmentToken,
+  autoresearchOrigin,
+  autoresearchToken,
+}: {
+  assessmentTarget?: string;
+  assessmentToken?: string;
+  autoresearchOrigin?: string;
+  autoresearchToken?: string;
+}) {
+  const autoresearch = buildAutoresearchProxy({ origin: autoresearchOrigin, token: autoresearchToken }) ?? {};
+  const proxy = {
+    ...(assessmentTarget && assessmentToken
+      ? {
+          "/__local/assessments": {
+            target: assessmentTarget,
+            changeOrigin: false,
+            headers: { "x-local-assessment-token": assessmentToken },
+          },
+        }
+      : {}),
+    ...autoresearch,
+  };
+  return Object.keys(proxy).length > 0 ? proxy : undefined;
+}
+
 const localBindingConfig = {
   main: "./worker/index.ts",
   compatibility_flags: ["nodejs_compat"],
@@ -53,13 +80,21 @@ export default defineConfig(async () => {
 
   // Wrangler snapshots its log path while the Cloudflare plugin is imported.
   const { cloudflare } = await import("@cloudflare/vite-plugin");
+  const localAssessmentTarget = process.env.LOCAL_ASSESSMENT_SERVICE_URL;
+  const localAssessmentToken = process.env.LOCAL_ASSESSMENT_PROXY_TOKEN;
+  const proxy = buildLocalServiceProxy({
+    assessmentTarget: localAssessmentTarget,
+    assessmentToken: localAssessmentToken,
+    autoresearchOrigin: process.env.AUTORESEARCH_SERVICE_ORIGIN,
+    autoresearchToken: process.env.AUTORESEARCH_CAPABILITY_TOKEN,
+  });
+  const server = {
+    ...(isCodexSeatbeltSandbox ? { watch: { useFsEvents: false, usePolling: true } } : {}),
+    ...(proxy ? { proxy } : {}),
+  };
 
   return {
-    server: (() => {
-      const proxy = buildAutoresearchProxy({ origin: process.env.AUTORESEARCH_SERVICE_ORIGIN, token: process.env.AUTORESEARCH_CAPABILITY_TOKEN });
-      if (isCodexSeatbeltSandbox) return { watch: { useFsEvents: false, usePolling: true }, ...(proxy ? { proxy } : {}) };
-      return proxy ? { proxy } : undefined;
-    })(),
+    server: Object.keys(server).length ? server : undefined,
     plugins: [
       vinext(),
       sites(),

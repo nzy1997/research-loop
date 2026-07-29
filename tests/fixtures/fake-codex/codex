@@ -1,0 +1,157 @@
+#!/usr/bin/env node
+import { execFile } from "node:child_process";
+import { writeFile } from "node:fs/promises";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
+
+const args = process.argv.slice(2);
+
+if (args[0] === "--version") {
+  console.log("codex fake-assessment-e2e");
+  process.exit(0);
+}
+
+if (args[0] === "login" && args[1] === "status") {
+  console.log("Logged in as fake assessment user.");
+  process.exit(0);
+}
+
+function dimension(id, label, weight, estimate = 4) {
+  return {
+    id,
+    label,
+    weight,
+    score: { min: estimate, estimate, max: estimate },
+    evidenceState: "supported",
+    rationale: `Fake Codex scored ${label} from the browser fixture.`,
+    evidenceRefs: ["p1", "k1"],
+  };
+}
+
+function normalizedResolution(result) {
+  return {
+    query: result.query,
+    status: result.status,
+    topic: result.bundle?.topic ?? null,
+    orderedFiles: result.bundle?.orderedFiles ?? [],
+  };
+}
+
+async function resolveKnowledge(query, selectedPage = null) {
+  const args = [
+    "--import", "tsx", "scripts/knowledge.ts", "resolve", "--query", query,
+    ...(selectedPage ? ["--select-page", selectedPage] : []),
+  ];
+  const { stdout } = await execFileAsync(process.execPath, args, {
+    cwd: process.cwd(),
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  return JSON.parse(stdout);
+}
+
+function completedEnvelope(problemId, resolution) {
+  const knowledgePath = resolution.orderedFiles.at(-1);
+  return {
+    outcome: "assessment",
+    language: "en",
+    knowledgeResolution: resolution,
+    assessment: {
+      schemaVersion: 1,
+      normalizedProblem: `Fake Codex completed assessment for ${problemId}.`,
+      verdict: { label: "DO_NOW", provisional: false, possibleLabels: ["DO_NOW"] },
+      recommendation: "proceed",
+      scores: {
+        researchValue: { min: 80, estimate: 80, max: 80 },
+        autoresearchSuitability: { min: 80, estimate: 80, max: 80 },
+        combined: { min: 80, estimate: 80, max: 80 },
+      },
+      confidence: {
+        level: "high",
+        rationale: "Fake Codex completed the assessment.",
+      },
+      dimensions: {
+        researchValue: [
+          dimension("importance", "Importance", 20),
+          dimension("gap_and_novelty", "Gap and novelty", 20),
+          dimension("plausibility", "Plausibility", 15),
+          dimension("learning_from_failure", "Learning from failure", 15),
+          dimension("generality_and_publication", "Generality and publication potential", 15),
+          dimension("expected_value_relative_to_cost", "Expected value relative to cost", 15),
+        ],
+        autoresearchSuitability: [
+          dimension("modifiable_search_object", "Modifiable search object", 20),
+          dimension("executable_objective", "Executable objective", 20),
+          dimension("correctness_and_anti_gaming", "Correctness and anti-gaming", 15),
+          dimension("incremental_feedback", "Incremental feedback", 15),
+          dimension("fresh_evaluation", "Fresh evaluation", 10),
+          dimension("reproducibility_and_auditability", "Reproducibility and auditability", 10),
+          dimension("attempt_runtime", "Attempt runtime", 10),
+        ],
+      },
+      largestBottleneck: "The fake run has no real scientific bottleneck.",
+      recommendedReframe: { kind: "none", text: "No bounded reframe is needed for the fixture." },
+      informationGaps: [],
+      evidence: [
+        {
+          id: "p1",
+          kind: "problem",
+          path: `problems/${problemId}/problem.md`,
+          locator: "fixture problem.md",
+          summary: "Problem text supplied by the local assessment browser fixture.",
+        },
+        {
+          id: "k1",
+          kind: "knowledge",
+          path: knowledgePath,
+          locator: "Trusted resolver bundle",
+          summary: "Trusted knowledge selected by the repository resolver.",
+        },
+      ],
+    },
+    clarification: null,
+  };
+}
+
+function ambiguousEnvelope(result) {
+  return {
+    outcome: "needs_input",
+    language: "en",
+    knowledgeResolution: normalizedResolution(result),
+    assessment: null,
+    clarification: {
+      query: result.query,
+      reason: "Fake Codex found two trusted knowledge candidates.",
+      alternatives: result.alternatives.map(({ page, topic, title, matchKind }) => ({
+        page,
+        topic,
+        title,
+        matchKind,
+      })),
+    },
+  };
+}
+
+if (args[0] !== "exec") {
+  console.error(`Unexpected fake Codex invocation: ${args.join(" ")}`);
+  process.exit(2);
+}
+
+const outputFlag = args.indexOf("--output-last-message");
+const outputPath = outputFlag >= 0 ? args[outputFlag + 1] : null;
+if (!outputPath) {
+  console.error("Missing --output-last-message path.");
+  process.exit(2);
+}
+
+const prompt = args.at(-1) ?? "";
+const problemId = prompt.includes("Problem ID: Prob-902") ? "Prob-902" : "Prob-901";
+const query = problemId === "Prob-902" ? "exact oracle" : "AKLT";
+const selectedPage = prompt.match(/^Page: (knowledge\/[^\n]+)$/m)?.[1] ?? null;
+const resolved = await resolveKnowledge(query, selectedPage);
+await writeFile(outputPath, `${JSON.stringify(
+  resolved.status === "ambiguous"
+    ? ambiguousEnvelope(resolved)
+    : completedEnvelope(problemId, normalizedResolution(resolved)),
+)}\n`);
+process.stdout.write(`${JSON.stringify({ type: "stage", stage: "fake-complete" })}\n`);

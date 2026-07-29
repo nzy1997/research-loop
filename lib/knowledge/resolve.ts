@@ -292,7 +292,11 @@ function buildBundle(
  * Callers that publish or answer research questions must use
  * `resolveKnowledge`, which validates first.
  */
-export function resolveGraph(graph: KnowledgeGraph, query: string): ResolveResult {
+export function resolveGraph(
+  graph: KnowledgeGraph,
+  query: string,
+  selectedPage?: string,
+): ResolveResult {
   const parsed = parseQuery(query);
   const order = curatedOrder(graph);
   const rankOf = (id: string): number => order.get(id) ?? UNCURATED;
@@ -326,6 +330,11 @@ export function resolveGraph(graph: KnowledgeGraph, query: string): ResolveResul
   );
 
   if (ranked.length === 0) {
+    if (selectedPage !== undefined) {
+      throw new KnowledgeQueryError(
+        `the selected page ${JSON.stringify(selectedPage)} cannot be applied because the query is not ambiguous`,
+      );
+    }
     return { schemaVersion: 1, query, status: "no-match", bundle: null, alternatives: [] };
   }
 
@@ -340,6 +349,25 @@ export function resolveGraph(graph: KnowledgeGraph, query: string): ResolveResul
 
   const topics = new Set(selected.map((entry) => entry.page.topicId));
   if (topics.size > 1) {
+    if (selectedPage !== undefined) {
+      const chosen = ranked.find((entry) => entry.candidate.page === selectedPage);
+      if (chosen === undefined) {
+        throw new KnowledgeQueryError(
+          `the selected page ${JSON.stringify(selectedPage)} is not a resolver alternative`,
+        );
+      }
+      const bundle = buildBundle(graph, order, [chosen]);
+      const named = new Set(bundle.orderedFiles);
+      return {
+        schemaVersion: 1,
+        query,
+        status: "match",
+        bundle,
+        alternatives: ranked
+          .filter((entry) => !named.has(entry.candidate.page))
+          .map((entry) => entry.candidate),
+      };
+    }
     return {
       schemaVersion: 1,
       query,
@@ -349,6 +377,11 @@ export function resolveGraph(graph: KnowledgeGraph, query: string): ResolveResul
     };
   }
 
+  if (selectedPage !== undefined) {
+    throw new KnowledgeQueryError(
+      `the selected page ${JSON.stringify(selectedPage)} cannot be applied because the query is not ambiguous`,
+    );
+  }
   const bundle = buildBundle(graph, order, selected);
   const named = new Set(bundle.orderedFiles);
   return {
@@ -371,7 +404,7 @@ export function resolveGraph(graph: KnowledgeGraph, query: string): ResolveResul
  */
 export async function resolveKnowledge(
   query: string,
-  options: LoadKnowledgeOptions & { bibliographyPath?: string } = {},
+  options: LoadKnowledgeOptions & { bibliographyPath?: string; selectedPage?: string } = {},
 ): Promise<ResolveResult> {
   const graph = await loadKnowledge(options);
   const report = await validateGraph(graph, {
@@ -380,5 +413,5 @@ export async function resolveKnowledge(
   if (!report.ok) {
     throw new KnowledgeValidationError(report);
   }
-  return resolveGraph(graph, query);
+  return resolveGraph(graph, query, options.selectedPage);
 }

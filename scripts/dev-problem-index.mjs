@@ -1,9 +1,11 @@
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { watch } from "node:fs";
 import { mkdir, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { startAssessmentService } from "./local-assessment-service.mjs";
 import { startService as startLocalAutoresearchService } from "./local-autoresearch-service.mjs";
 
 const ignoredRoots = new Set([".generated", ".git", "node_modules", ".next", ".vinext", "dist", ".wrangler"]);
@@ -169,22 +171,61 @@ export function runIndexBuild(rootDir, spawnFn = spawn, { outputRootDir = rootDi
   });
 }
 
-export async function main({ rootDir = process.cwd(), runIndexBuildFn = runIndexBuild, watchProblemFilesFn = watchProblemFiles, startService = startLocalAutoresearchService, spawnFn = spawn, processRef = process, environment = process.env } = {}) {
+export async function main({
+  rootDir = process.cwd(),
+  runIndexBuildFn = runIndexBuild,
+  watchProblemFilesFn = watchProblemFiles,
+  startAutoresearchServiceFn = startLocalAutoresearchService,
+  startAssessmentServiceFn = startAssessmentService,
+  spawnFn = spawn,
+  processRef = process,
+  environment = process.env,
+  vinextDevArgs = process.argv.slice(2),
+} = {}) {
   const resolvedRootDir = resolve(rootDir);
   const workspaceRootDir = resolve(environment.AUTORESEARCH_WORKSPACE_ROOT ?? resolvedRootDir);
 
   await runIndexBuildFn(workspaceRootDir, spawnFn, { outputRootDir: resolvedRootDir });
 
-  const service = await startService({ rootDir: workspaceRootDir, privateDataRoot: environment.AUTORESEARCH_PRIVATE_ROOT });
-  let serviceClose;
-  const closeService = () => {
-    serviceClose ??= Promise.resolve(service.close()).catch((error) => console.error(error.message));
-    return serviceClose;
-  };
-
+  const assessmentToken = randomBytes(16).toString("hex");
   let timer;
   let watcher;
+  let assessmentService;
+  let autoresearchService;
+  let child;
+  let cleanupPromise;
+  const cleanup = () => {
+    cleanupPromise ??= (async () => {
+      try {
+        watcher?.close();
+      } finally {
+        clearTimeout(timer);
+        const closePromises = [];
+        if (assessmentService) closePromises.push(assessmentService.close());
+        if (autoresearchService) closePromises.push(autoresearchService.close());
+        await Promise.all(closePromises);
+      }
+    })();
+    return cleanupPromise;
+  };
+
   try {
+    assessmentService = await startAssessmentServiceFn({
+      rootDir: resolvedRootDir,
+      token: assessmentToken,
+    });
+
+    const privateDataRoot = environment.AUTORESEARCH_PRIVATE_ROOT;
+    if (typeof privateDataRoot === "string" && privateDataRoot.length > 0) {
+      autoresearchService = await startAutoresearchServiceFn({
+        rootDir: workspaceRootDir,
+        privateDataRoot,
+        codexPath: environment.AUTORESEARCH_CODEX_PATH,
+        schemaPath: environment.AUTORESEARCH_SCHEMA_PATH,
+        indexOutputRoot: resolvedRootDir,
+      });
+    }
+
     watcher = await watchProblemFilesFn({
       rootDir: workspaceRootDir,
       onChange() {
@@ -194,48 +235,61 @@ export async function main({ rootDir = process.cwd(), runIndexBuildFn = runIndex
         }, 150);
       },
     });
+
+    const vinextEnvironment = { ...environment };
+    for (const key of [
+      "AUTORESEARCH_PRIVATE_ROOT",
+      "AUTORESEARCH_WORKSPACE_ROOT",
+      "AUTORESEARCH_CODEX_PATH",
+      "AUTORESEARCH_SCHEMA_PATH",
+      "AUTORESEARCH_INDEX_OUTPUT_ROOT",
+      "AUTORESEARCH_DEV_HOST",
+      "AUTORESEARCH_DEV_PORT",
+    ]) delete vinextEnvironment[key];
+
+    const vinextArgs = ["dev", ...vinextDevArgs];
+    const devHost = environment.AUTORESEARCH_DEV_HOST;
+    const devPort = environment.AUTORESEARCH_DEV_PORT;
+    if (typeof devHost === "string" && devHost.length > 0) vinextArgs.push("--host", devHost);
+    if (typeof devPort === "string" && devPort.length > 0) vinextArgs.push("--port", devPort);
+
+    child = spawnFn("vinext", vinextArgs, {
+      cwd: resolvedRootDir,
+      env: {
+        ...vinextEnvironment,
+        WRANGLER_LOG_PATH: ".wrangler/wrangler.log",
+        LOCAL_ASSESSMENT_SERVICE_URL: assessmentService.url,
+        LOCAL_ASSESSMENT_PROXY_TOKEN: assessmentService.token ?? assessmentToken,
+        ...(autoresearchService ? {
+          AUTORESEARCH_CAPABILITY_TOKEN: autoresearchService.token,
+          AUTORESEARCH_SERVICE_ORIGIN: autoresearchService.origin,
+        } : {}),
+      },
+      stdio: "inherit",
+    });
   } catch (error) {
-    await closeService();
+    await cleanup();
     throw error;
   }
-
-  const devHost = environment.AUTORESEARCH_DEV_HOST;
-  const devPort = environment.AUTORESEARCH_DEV_PORT;
-  const vinextEnvironment = { ...environment };
-  for (const key of [
-    "AUTORESEARCH_PRIVATE_ROOT",
-    "AUTORESEARCH_WORKSPACE_ROOT",
-    "AUTORESEARCH_CODEX_PATH",
-    "AUTORESEARCH_SCHEMA_PATH",
-    "AUTORESEARCH_INDEX_OUTPUT_ROOT",
-    "AUTORESEARCH_DEV_HOST",
-    "AUTORESEARCH_DEV_PORT",
-  ]) delete vinextEnvironment[key];
-  const vinextArgs = ["dev"];
-  if (typeof devHost === "string" && devHost.length > 0) vinextArgs.push("--host", devHost);
-  if (typeof devPort === "string" && devPort.length > 0) vinextArgs.push("--port", devPort);
-  const child = spawnFn("vinext", vinextArgs, {
-    cwd: resolvedRootDir,
-    env: { ...vinextEnvironment, AUTORESEARCH_CAPABILITY_TOKEN: service.token, AUTORESEARCH_SERVICE_ORIGIN: service.origin, WRANGLER_LOG_PATH: ".wrangler/wrangler.log" },
-    stdio: "inherit",
-  });
 
   let stopped = false;
   const stop = (signal) => {
     if (stopped) return;
     stopped = true;
-    closeService();
     child.kill(signal);
+    cleanup().catch((error) => console.error(error.message));
   };
   for (const signal of ["SIGINT", "SIGTERM"]) {
     processRef.on(signal, () => stop(signal));
   }
 
-  child.on("exit", (code, signal) => {
-    watcher.close();
-    clearTimeout(timer);
-    closeService();
+  child.on("exit", async (code, signal) => {
+    await cleanup();
     processRef.exitCode = code ?? (signal ? 1 : 0);
+  });
+  child.on("error", async () => {
+    await cleanup();
+    processRef.exitCode = 1;
   });
 }
 
