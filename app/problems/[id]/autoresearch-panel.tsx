@@ -24,15 +24,17 @@ const jobIdPattern = /^ARJ-\d{8}T\d{6}Z-[a-f0-9]{8}$/;
 export function AutoresearchPanel({
   problemId,
   initialEligibility,
+  sidecarAvailable,
 }: {
   problemId: string;
   initialEligibility: boolean;
+  sidecarAvailable: boolean;
 }) {
   const [serviceState, setServiceState] = useState<ServiceState | null>(null);
   const [answer, setAnswer] = useState("");
   const requestSequence = useRef(0);
   const controller = useRef<AbortController | null>(null);
-  const localMode = initialEligibility;
+  const localMode = sidecarAvailable;
   const view = buildPreparationPanelState({
     problem: { id: problemId, status: initialEligibility ? "qualifying" : "draft" },
     serviceState,

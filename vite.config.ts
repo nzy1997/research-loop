@@ -1,5 +1,6 @@
 import vinext from "vinext";
 import { defineConfig } from "vite";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import hostingConfig from "./.openai/hosting.json" with { type: "json" };
 import { sites } from "./build/sites-vite-plugin.ts";
 
@@ -10,6 +11,29 @@ const { d1, r2 } = hostingConfig;
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
+const SAFE_PROXY_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+function rejectCrossSiteMutation(request: IncomingMessage, response?: ServerResponse) {
+  if (SAFE_PROXY_METHODS.has(request.method ?? "GET")) return undefined;
+  const host = request.headers.host;
+  const origin = request.headers.origin;
+  const fetchSite = request.headers["sec-fetch-site"];
+  let sameOrigin = false;
+  try {
+    const parsedOrigin = typeof origin === "string" ? new URL(origin) : null;
+    sameOrigin = parsedOrigin?.protocol === "http:"
+      && parsedOrigin.host.toLowerCase() === host?.toLowerCase();
+  } catch {
+    sameOrigin = false;
+  }
+  if (sameOrigin && (fetchSite === undefined || fetchSite === "same-origin")) return undefined;
+  response?.writeHead(403, {
+    "cache-control": "no-store",
+    "content-type": "application/json; charset=utf-8",
+  });
+  response?.end(JSON.stringify({ error: { code: "INVALID_REQUEST", message: "Cross-site mutation is not allowed." } }));
+  return false;
+}
 
 export function buildAutoresearchProxy({ origin, token }: { origin?: string; token?: string }) {
   if (!origin || !token) return undefined;
@@ -18,6 +42,7 @@ export function buildAutoresearchProxy({ origin, token }: { origin?: string; tok
       target: origin,
       changeOrigin: true,
       headers: { "x-research-loop-capability": token },
+      bypass: rejectCrossSiteMutation,
     },
   };
 }

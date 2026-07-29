@@ -261,6 +261,9 @@ test("server-renders the generic problem detail shell for non-example problems",
   assert.match(html, /<p class="eyebrow">Prob-017<\/p>/);
   assert.match(html, /<h1>Fresh Hamiltonian gate<\/h1>/);
   assert.match(html, /<p class="detail-summary">Interval arithmetic on held-out instances\.<\/p>/);
+  assert.match(html, /Available in local mode/);
+  assert.match(html, /<button[^>]*disabled=""[^>]*>Prepare autoresearch<\/button>/);
+  assert.doesNotMatch(html, /<h2[^>]*>Prepare infrastructure<\/h2>/);
   assert.match(html, /<section class="assessment-panel assessment-unavailable" aria-labelledby="assessment-heading">/);
   assert.match(html, /Local assessment unavailable/);
   assert.match(html, /The detailed problem workspace will be designed next; this page currently locks the route, identity, and return path\./);

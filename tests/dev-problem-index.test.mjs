@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { createServer as createHttpServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
+import { createServer as createViteServer } from "vite";
 
 import { ensureProblemWatchDir, main, watchProblemFiles } from "../scripts/dev-problem-index.mjs";
 import { buildAutoresearchProxy, buildLocalServiceProxy } from "../vite.config.ts";
@@ -283,30 +285,93 @@ test("dev wrapper closes started sidecars when watcher startup rejects", async (
 
 test("Vite proxies local assessment and autoresearch routes without merging credentials", () => {
   assert.equal(buildAutoresearchProxy({}), undefined);
-  assert.deepEqual(buildAutoresearchProxy({ origin: "http://127.0.0.1:9123", token: "capability" }), {
-    "/__local/autoresearch": {
-      target: "http://127.0.0.1:9123",
-      changeOrigin: true,
-      headers: { "x-research-loop-capability": "capability" },
-    },
-  });
-  assert.deepEqual(buildLocalServiceProxy({
+  const autoresearch = buildAutoresearchProxy({ origin: "http://127.0.0.1:9123", token: "capability" });
+  assert.equal(autoresearch["/__local/autoresearch"].target, "http://127.0.0.1:9123");
+  assert.equal(autoresearch["/__local/autoresearch"].changeOrigin, true);
+  assert.deepEqual(autoresearch["/__local/autoresearch"].headers, { "x-research-loop-capability": "capability" });
+
+  const services = buildLocalServiceProxy({
     assessmentTarget: "http://127.0.0.1:39001",
     assessmentToken: "assessment-token",
     autoresearchOrigin: "http://127.0.0.1:9123",
     autoresearchToken: "autoresearch-token",
-  }), {
-    "/__local/assessments": {
-      target: "http://127.0.0.1:39001",
-      changeOrigin: false,
-      headers: { "x-local-assessment-token": "assessment-token" },
-    },
-    "/__local/autoresearch": {
-      target: "http://127.0.0.1:9123",
-      changeOrigin: true,
-      headers: { "x-research-loop-capability": "autoresearch-token" },
+  });
+  assert.deepEqual(services["/__local/assessments"], {
+    target: "http://127.0.0.1:39001",
+    changeOrigin: false,
+    headers: { "x-local-assessment-token": "assessment-token" },
+  });
+  assert.equal(services["/__local/autoresearch"].target, "http://127.0.0.1:9123");
+  assert.equal(services["/__local/autoresearch"].changeOrigin, true);
+  assert.deepEqual(services["/__local/autoresearch"].headers, { "x-research-loop-capability": "autoresearch-token" });
+});
+
+test("autoresearch proxy rejects cross-site mutations before injecting its capability", async (t) => {
+  const upstreamRequests = [];
+  const upstream = createHttpServer((request, response) => {
+    upstreamRequests.push({
+      method: request.method,
+      capability: request.headers["x-research-loop-capability"],
+    });
+    response.writeHead(202, { "content-type": "application/json" });
+    response.end("{}");
+  });
+  await new Promise((resolve, reject) => {
+    upstream.once("error", reject);
+    upstream.listen(0, "127.0.0.1", resolve);
+  });
+  t.after(() => new Promise((resolve, reject) => upstream.close((error) => error ? reject(error) : resolve())));
+  const upstreamAddress = upstream.address();
+
+  const vite = await createViteServer({
+    configFile: false,
+    logLevel: "silent",
+    server: {
+      host: "127.0.0.1",
+      port: 0,
+      proxy: buildAutoresearchProxy({
+        origin: `http://127.0.0.1:${upstreamAddress.port}`,
+        token: "proxy-capability",
+      }),
     },
   });
+  await vite.listen();
+  t.after(() => vite.close());
+  const viteAddress = vite.httpServer.address();
+  const devOrigin = `http://127.0.0.1:${viteAddress.port}`;
+  const path = "/__local/autoresearch/problems/Prob-007/prepare";
+
+  const rejected = await fetch(`${devOrigin}${path}`, {
+    method: "POST",
+    headers: {
+      "content-type": "text/plain",
+      origin: "https://attacker.example",
+      "sec-fetch-site": "cross-site",
+    },
+    body: "{}",
+  });
+  assert.equal(rejected.status, 403);
+  assert.equal(upstreamRequests.length, 0);
+
+  const accepted = await fetch(`${devOrigin}${path}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      origin: devOrigin,
+      "sec-fetch-site": "same-origin",
+    },
+    body: "{}",
+  });
+  assert.equal(accepted.status, 202);
+
+  const status = await fetch(`${devOrigin}/__local/autoresearch/problems/Prob-007`, {
+    headers: { origin: "https://attacker.example", "sec-fetch-site": "cross-site" },
+  });
+  assert.equal(status.status, 202);
+  assert.deepEqual(upstreamRequests, [
+    { method: "POST", capability: "proxy-capability" },
+    { method: "GET", capability: "proxy-capability" },
+  ]);
 });
 
 test("manual service help documents the required private root", async () => {

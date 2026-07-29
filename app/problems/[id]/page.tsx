@@ -34,6 +34,10 @@ export default async function ProblemDetailPage({
     researchRecord,
     diagnostics: researchDiagnostics,
   });
+  const sidecarAvailable = Boolean(
+    process.env.AUTORESEARCH_SERVICE_ORIGIN
+      && process.env.AUTORESEARCH_CAPABILITY_TOKEN,
+  );
 
   if (isStaticResearchExampleProblem(problem.id)) {
     const example = getStaticResearchExample(problem.id);
@@ -138,7 +142,7 @@ export default async function ProblemDetailPage({
             <span>{ledger.rows.length} attempts</span>
           </div>
         </header>
-        <AutoresearchPanel problemId={problem.id} initialEligibility={problem.status === "qualifying" || problem.status === "accepted"} />
+        <AutoresearchPanel problemId={problem.id} initialEligibility={problem.status === "qualifying" || problem.status === "accepted"} sidecarAvailable={sidecarAvailable} />
         <AssessmentPanel problemId={problem.id} />
         <p className="example-disclaimer">{researchState.disclaimer}</p>
         <dl className="research-metric-strip" aria-label="Research metrics">
@@ -219,7 +223,7 @@ export default async function ProblemDetailPage({
       <p className="eyebrow">{problem.id}</p>
       <h1>{problem.title}</h1>
       <p className="detail-summary">{problem.summary}</p>
-      <AutoresearchPanel problemId={problem.id} initialEligibility={problem.status === "qualifying" || problem.status === "accepted"} />
+      <AutoresearchPanel problemId={problem.id} initialEligibility={problem.status === "qualifying" || problem.status === "accepted"} sidecarAvailable={sidecarAvailable} />
       <AssessmentPanel problemId={problem.id} />
       <section className="detail-panel" aria-labelledby="detail-status-heading">
         <h2 id="detail-status-heading">Problem detail</h2>

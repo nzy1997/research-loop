@@ -43,6 +43,16 @@ async function service(t, options = {}) {
   return { ...running, ...deps, rootDir };
 }
 
+async function writeNeedsInputQuestion(rootDir, question = {
+  id: "metric",
+  prompt: "Choose a metric",
+  answerType: "choice",
+  choices: ["score", "loss"],
+}) {
+  await mkdir(join(rootDir, "jobs", JOB), { recursive: true });
+  await writeFile(join(rootDir, "jobs", JOB, "events.jsonl"), `${JSON.stringify({ code: "needs-input", question })}\n`);
+}
+
 function request(origin, path, options = {}) {
   return fetch(`${origin}${path}`, { ...options, headers: { "x-research-loop-capability": TOKEN, ...options.headers } });
 }
@@ -138,7 +148,8 @@ test("concurrent prepare requests reserve one job before asynchronous creation",
 });
 
 test("concurrent and repeated input submissions reuse one persisted child job", async (t) => {
-  const { origin, calls } = await service(t, { initial: job({ state: "needs_input" }) });
+  const { origin, calls, rootDir } = await service(t, { initial: job({ state: "needs_input" }) });
+  await writeNeedsInputQuestion(rootDir);
   const submit = () => request(origin, `/__local/autoresearch/jobs/${JOB}/input`, {
     method: "POST",
     body: JSON.stringify({ answers: { metric: "score" } }),
@@ -159,6 +170,38 @@ test("concurrent and repeated input submissions reuse one persisted child job", 
   assert.equal(calls.resume.length, 1);
 });
 
+test("rejects answers that do not exactly match the active persisted question", async (t) => {
+  const { origin, calls, rootDir } = await service(t, { initial: job({ state: "needs_input" }) });
+  await writeNeedsInputQuestion(rootDir);
+
+  for (const answers of [
+    { unrelated: "score" },
+    { metric: "score", unrelated: "loss" },
+  ]) {
+    const response = await request(origin, `/__local/autoresearch/jobs/${JOB}/input`, {
+      method: "POST",
+      body: JSON.stringify({ answers }),
+    });
+    assert.equal(response.status, 400);
+  }
+  assert.deepEqual(calls.create, []);
+  assert.deepEqual(calls.resume, []);
+});
+
+test("rejects an answer outside the active choice question's declared choices", async (t) => {
+  const { origin, calls, rootDir } = await service(t, { initial: job({ state: "needs_input" }) });
+  await writeNeedsInputQuestion(rootDir);
+
+  const response = await request(origin, `/__local/autoresearch/jobs/${JOB}/input`, {
+    method: "POST",
+    body: JSON.stringify({ answers: { metric: "accuracy" } }),
+  });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(calls.create, []);
+  assert.deepEqual(calls.resume, []);
+});
+
 test("a restarted service resumes the latest persisted needs-input job", async (t) => {
   const rootDir = await mkdtemp(join(tmpdir(), "autoresearch-restart-"));
   const privateDataRoot = join(rootDir, "private");
@@ -167,6 +210,8 @@ test("a restarted service resumes the latest persisted needs-input job", async (
   const store = createJobStore({ rootDir });
   const parent = await store.create({ problemId: PROBLEM, kind: "preparation" });
   for (const state of ["scaffolding", "building_benchmark", "preparing_datasets", "needs_input"]) await store.transition(parent.jobId, state);
+  await mkdir(join(rootDir, "jobs", parent.jobId), { recursive: true });
+  await writeFile(join(rootDir, "jobs", parent.jobId, "events.jsonl"), `${JSON.stringify({ code: "needs-input", question: { id: "metric", prompt: "Choose a metric", answerType: "choice", choices: ["score", "loss"] } })}\n`);
 
   const running = await startService({ rootDir, privateDataRoot, token: TOKEN });
   t.after(() => running.close());
