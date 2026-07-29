@@ -85,7 +85,8 @@ async function treeText(root) {
 test("runs the stable host-owned suite with isolated candidate and evaluator inputs", async (t) => {
   const value = await fixture(t);
   const calls = [];
-  const report = await runInfrastructurePreflight({ ...value, processRunner: runner(calls), now: () => FIXED_NOW });
+  const controller = new AbortController();
+  const report = await runInfrastructurePreflight({ ...value, processRunner: runner(calls), now: () => FIXED_NOW, signal: controller.signal });
 
   assert.deepEqual(PREFLIGHT_CHECK_IDS, [
     "manifest-integrity", "clean-environment", "candidate-api", "public-smoke", "correctness-negative", "hard-code-negative", "crash-negative", "timeout-negative", "containment", "private-data-isolation", "baseline-reproduction", "score-arithmetic", "reproducibility",
@@ -97,6 +98,7 @@ test("runs the stable host-owned suite with isolated candidate and evaluator inp
   assert.equal(report.attemptRuntimeUpperBoundSeconds, 65);
   assert.ok(report.checks.every((check) => check.status === "passed" && Number.isFinite(check.durationMs) && Array.isArray(check.diagnostics)));
   assert.ok(calls.every((call) => call.shell === false && call.cwd === value.stageDir && call.timeoutMs === 60_000));
+  assert.ok(calls.every((call) => call.signal === controller.signal));
   const candidateCalls = calls.filter((call) => call.privateDataRoot === undefined);
   assert.ok(candidateCalls.length > 0);
   assert.ok(candidateCalls.every((call) => !call.args.includes(value.privateDataRoot) && !Object.values(call.env).includes(value.privateDataRoot)));
@@ -127,6 +129,21 @@ test("fails closed on integrity or containment failure and records escaped diagn
   assert.equal(check.status, "failed");
   assert.match(check.diagnostics[0], /&lt;unsafe&gt;/);
   assert.ok(check.diagnostics[0].length <= 1024);
+});
+
+test("aborted preflight stops immediately instead of recording ordinary check failures", async (t) => {
+  const value = await fixture(t);
+  const controller = new AbortController();
+  controller.abort();
+  let calls = 0;
+
+  await assert.rejects(() => runInfrastructurePreflight({
+    ...value,
+    signal: controller.signal,
+    processRunner: async () => { calls += 1; throw controller.signal.reason; },
+    now: () => FIXED_NOW,
+  }), /abort/i);
+  assert.equal(calls, 0);
 });
 
 test("marks semantic benchmark defects as failed without short-circuiting safe checks", async (t) => {

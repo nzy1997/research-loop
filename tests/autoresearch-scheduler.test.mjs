@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createScheduler } from "../lib/autoresearch/scheduler.mjs";
+import * as serviceScript from "../scripts/local-autoresearch-service.mjs";
 
 function deferred() {
   let resolve;
@@ -74,6 +75,63 @@ test("needs input releases its slot but keeps the problem reservation", async ()
   await scheduler.shutdown();
 });
 
+test("restores a persisted needs-input reservation without rerunning its parent", async () => {
+  const started = [];
+  const scheduler = createScheduler({ concurrency: 1, runJob: async (job) => {
+    started.push(job.jobId);
+    return { state: "ready" };
+  } });
+  const parent = { jobId: "one", problemId: "Prob-001", kind: "preparation", state: "needs_input" };
+
+  assert.deepEqual(scheduler.restoreSuspended(parent), parent);
+  assert.equal(scheduler.enqueue({ jobId: "duplicate", problemId: "Prob-001", kind: "preparation", state: "queued" }).jobId, "one");
+  const child = scheduler.resumeAfterInput({ jobId: "one-child", problemId: "Prob-001", kind: "preparation", state: "queued", parentJobId: "one" });
+  await turns();
+
+  assert.equal(child.jobId, "one-child");
+  assert.deepEqual(started, ["one-child"]);
+  await scheduler.shutdown();
+});
+
+test("restores only the latest persisted needs-input job for each problem", async () => {
+  const scheduler = createScheduler({ concurrency: 1, runJob: async () => ({ state: "ready" }) });
+  const jobs = [
+    { jobId: "old-parent", problemId: "Prob-001", kind: "preparation", state: "needs_input" },
+    { jobId: "completed-child", problemId: "Prob-001", kind: "preparation", state: "ready", parentJobId: "old-parent" },
+    { jobId: "current-parent", problemId: "Prob-002", kind: "preparation", state: "needs_input" },
+  ];
+
+  assert.deepEqual(await serviceScript.restoreLatestSuspendedJobs({ jobStore: { async list() { return jobs; } }, scheduler }), ["current-parent"]);
+  assert.equal(scheduler.enqueue({ jobId: "duplicate", problemId: "Prob-002", kind: "preparation", state: "queued" }).jobId, "current-parent");
+  assert.equal(scheduler.enqueue({ jobId: "new", problemId: "Prob-001", kind: "preparation", state: "queued" }).jobId, "new");
+  await scheduler.shutdown();
+});
+
+test("restores a persisted queued input child with its answers", async () => {
+  const started = [];
+  const scheduler = createScheduler({ concurrency: 1, runJob: async (job) => {
+    started.push(job);
+    return { state: "ready" };
+  } });
+  const parent = { jobId: "parent", problemId: "Prob-001", kind: "preparation", state: "needs_input" };
+  const child = {
+    jobId: "child", problemId: "Prob-001", kind: "preparation", state: "queued",
+    parentJobId: "parent", answers: { metric: "score" },
+  };
+
+  assert.deepEqual(
+    await serviceScript.restoreLatestSuspendedJobs({
+      jobStore: { async list() { return [parent, child]; }, async read() { return parent; } },
+      scheduler,
+    }),
+    ["child"],
+  );
+  await turns();
+
+  assert.deepEqual(started, [child]);
+  await scheduler.shutdown();
+});
+
 test("queues a resumed child behind existing work", async () => {
   const started = [];
   const first = deferred();
@@ -118,4 +176,19 @@ test("shutdown prevents new starts and waits for worker termination", async () =
   assert.equal(finished, false);
   terminated.resolve();
   await stopped;
+});
+
+test("the service runner aborts active preparation work during scheduler shutdown", async () => {
+  let observedSignal;
+  const runJob = serviceScript.createCancelablePreparationRunner(async ({ signal }) => {
+    observedSignal = signal;
+    return new Promise((resolve) => signal.addEventListener("abort", () => resolve({ state: "interrupted" }), { once: true }));
+  });
+  const scheduler = createScheduler({ concurrency: 1, runJob });
+  scheduler.enqueue({ jobId: "one", problemId: "Prob-001", kind: "preparation", state: "queued" });
+  await turns();
+
+  await scheduler.shutdown();
+
+  assert.equal(observedSignal.aborted, true);
 });

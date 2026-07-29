@@ -5,7 +5,9 @@ import { join } from "node:path";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 
+import { createJobStore } from "../lib/autoresearch/job-store.mjs";
 import { startLocalAutoresearchService } from "../lib/autoresearch/local-service.mjs";
+import { startService } from "../scripts/local-autoresearch-service.mjs";
 
 const TOKEN = "test-capability-token";
 const JOB = "ARJ-20260728T080000Z-deadbeef";
@@ -85,7 +87,7 @@ test("validates routes, methods, body size, JSON, and identifiers before schedul
 });
 
 test("deduplicates prepare jobs and returns a bounded public status", async (t) => {
-  const { origin, calls } = await service(t);
+  const { origin, calls } = await service(t, { initial: job({ state: "failed" }) });
   const first = await request(origin, `/__local/autoresearch/problems/${PROBLEM}/prepare`, { method: "POST", body: "{}" });
   assert.equal(first.status, 202);
   const firstJob = await first.json();
@@ -100,6 +102,17 @@ test("deduplicates prepare jobs and returns a bounded public status", async (t) 
   assert.deepEqual(await status.json(), { jobId: firstJob.jobId, problemId: PROBLEM, state: "queued" });
 });
 
+test("prepare reuses the latest persisted nonterminal job before creating a reservation", async (t) => {
+  const { origin, calls } = await service(t, { initial: job({ state: "needs_input" }) });
+
+  const response = await request(origin, `/__local/autoresearch/problems/${PROBLEM}/prepare`, { method: "POST", body: "{}" });
+
+  assert.equal(response.status, 202);
+  assert.equal((await response.json()).jobId, JOB);
+  assert.equal(calls.create.length, 0);
+  assert.equal(calls.enqueue.length, 0);
+});
+
 test("concurrent prepare requests reserve one job before asynchronous creation", async (t) => {
   const rootDir = await mkdtemp(join(tmpdir(), "autoresearch-local-service-"));
   t.after(() => rm(rootDir, { recursive: true, force: true }));
@@ -108,7 +121,7 @@ test("concurrent prepare requests reserve one job before asynchronous creation",
   const jobStore = {
     async create(value) { calls.push(value); await delay(15); return created; },
     async read() { return created; },
-    async list() { return [created]; },
+    async list() { return calls.length === 0 ? [] : [created]; },
   };
   const scheduler = { enqueue(value) { return value; }, resumeAfterInput() {} };
   const running = await startLocalAutoresearchService({ rootDir, token: TOKEN, scheduler, jobStore });
@@ -122,6 +135,49 @@ test("concurrent prepare requests reserve one job before asynchronous creation",
     { jobId: created.jobId, problemId: PROBLEM, state: "queued" },
     { jobId: created.jobId, problemId: PROBLEM, state: "queued" },
   ]);
+});
+
+test("concurrent and repeated input submissions reuse one persisted child job", async (t) => {
+  const { origin, calls } = await service(t, { initial: job({ state: "needs_input" }) });
+  const submit = () => request(origin, `/__local/autoresearch/jobs/${JOB}/input`, {
+    method: "POST",
+    body: JSON.stringify({ answers: { metric: "score" } }),
+  });
+
+  const responses = await Promise.all([submit(), submit()]);
+  assert.deepEqual(responses.map((response) => response.status), [202, 202]);
+  const payloads = await Promise.all(responses.map((response) => response.json()));
+  assert.equal(payloads[0].jobId, "ARJ-20260728T080001Z-cafebabe");
+  assert.equal(payloads[1].jobId, payloads[0].jobId);
+  assert.equal(calls.create.length, 1);
+  assert.equal(calls.resume.length, 1);
+
+  const repeated = await submit();
+  assert.equal(repeated.status, 202);
+  assert.equal((await repeated.json()).jobId, payloads[0].jobId);
+  assert.equal(calls.create.length, 1);
+  assert.equal(calls.resume.length, 1);
+});
+
+test("a restarted service resumes the latest persisted needs-input job", async (t) => {
+  const rootDir = await mkdtemp(join(tmpdir(), "autoresearch-restart-"));
+  const privateDataRoot = join(rootDir, "private");
+  await mkdir(privateDataRoot);
+  t.after(() => rm(rootDir, { recursive: true, force: true }));
+  const store = createJobStore({ rootDir });
+  const parent = await store.create({ problemId: PROBLEM, kind: "preparation" });
+  for (const state of ["scaffolding", "building_benchmark", "preparing_datasets", "needs_input"]) await store.transition(parent.jobId, state);
+
+  const running = await startService({ rootDir, privateDataRoot, token: TOKEN });
+  t.after(() => running.close());
+  const response = await request(running.origin, `/__local/autoresearch/jobs/${parent.jobId}/input`, {
+    method: "POST",
+    body: JSON.stringify({ answers: { metric: "score" } }),
+  });
+
+  assert.equal(response.status, 202);
+  const children = (await store.list()).filter((item) => item.parentJobId === parent.jobId);
+  assert.equal(children.length, 1);
 });
 
 test("releases a reservation when its latest persisted job state is terminal", async (t) => {

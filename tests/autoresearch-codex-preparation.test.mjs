@@ -38,8 +38,10 @@ test("runs the exact isolated codex invocation and trusts only host final output
   const stageDir = await mkdtemp(join(tmpdir(), "prepare-codex-"));
   try {
     const calls = [];
+    const controller = new AbortController();
     const result = await runPreparationCodex({
       codexPath: "codex", stageDir, problem: { id: "Prob-007", title: "Fixture", summary: "Summary" }, problemMarkdown: "markdown", answers: { metric: "f1" }, schemaPath: "/schema",
+      signal: controller.signal,
       processRunner: async (options) => {
         calls.push(options);
         await writeFile(join(stageDir, ".preparation-result.json"), JSON.stringify(envelope));
@@ -49,6 +51,7 @@ test("runs the exact isolated codex invocation and trusts only host final output
     });
     assert.deepEqual(result, envelope);
     assert.equal(calls[0].cwd, stageDir);
+    assert.equal(calls[0].signal, controller.signal);
     assert.ok(calls[0].timeoutMs > 0, "Codex execution must set a host-controlled timeout");
     assert.equal(calls[0].env.PATH, process.env.PATH);
     assert.deepEqual(calls[0].args, ["exec", "--sandbox", "workspace-write", "--ephemeral", "--json", "--output-schema", "/schema", "--output-last-message", join(stageDir, ".preparation-result.json"), calls[0].args.at(-1)]);

@@ -53,6 +53,21 @@ test("rejects skipped and backward states while retaining immutable lineage", as
   });
 });
 
+test("persists child answers so queued input can resume after a service restart", async (t) => {
+  const { store } = await fixture(t);
+  const parent = await store.create({ problemId: "Prob-007", kind: "preparation" });
+  const answers = { metric: "score", retries: 2, confirmed: true };
+
+  const child = await store.create({
+    problemId: "Prob-007",
+    kind: "preparation",
+    parentJobId: parent.jobId,
+    answers,
+  });
+
+  assert.deepEqual((await store.read(child.jobId)).answers, answers);
+});
+
 test("allows preparation to pause for input before preflight", async (t) => {
   const { store } = await fixture(t);
   const job = await store.create({ problemId: "Prob-007", kind: "preparation" });

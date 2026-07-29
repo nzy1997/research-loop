@@ -50,7 +50,7 @@ async function fixture(t, { status, parentJobId = null } = {}) {
   return { rootDir, workspaceDir, jobs: new Map([[JOB, { jobId: JOB, problemId: PROBLEM, parentJobId, state: "queued" }]]) };
 }
 
-function dependencies(context, { envelope = { outcome: "prepared", summary: "Ready", manifestPath: "infrastructure.json", question: null }, preflight = { status: "passed" }, existing = [], publish = { status: "published", id: "INF-001" }, codexError, manifestValue = manifest(), list, publishError, stageMutation, expectedProblemStatus = "qualifying" } = {}) {
+function dependencies(context, { envelope = { outcome: "prepared", summary: "Ready", manifestPath: "infrastructure.json", question: null }, preflight = { status: "passed" }, existing = [], publish = { status: "published", id: "INF-001" }, codexError, manifestValue = manifest(), list, publishError, stageMutation, reportMutation, expectedProblemStatus = "qualifying" } = {}) {
   const order = [];
   const jobStore = {
     async read(jobId) { order.push(`read:${jobId}`); return context.jobs.get(jobId); },
@@ -60,7 +60,7 @@ function dependencies(context, { envelope = { outcome: "prepared", summary: "Rea
   const artifactStore = {
     async createPreparationStage({ jobId }) { order.push("stage"); if (stageMutation) await stageMutation(); return { stageDir: join(context.rootDir, ".generated", "autoresearch-jobs", jobId), workspaceDir: context.workspaceDir }; },
     async listInfrastructureRevisions() { order.push("list"); return list ? list() : [...existing]; },
-    async writeAtomicJson(path, value) { order.push("report"); await writeFile(path, `${JSON.stringify(value)}\n`); },
+    async writeAtomicJson(path, value) { order.push("report"); await writeFile(path, `${JSON.stringify(value)}\n`); if (reportMutation) await reportMutation(); },
     async publishInfrastructureRevision() { order.push("publish"); if (publishError) throw publishError; return publish; },
   };
   const codexAdapter = async ({ stageDir, problem: preparedProblem, answers }) => { order.push("codex"); assert.equal(stageDir, join(context.rootDir, ".generated", "autoresearch-jobs", JOB)); assert.equal(preparedProblem.status, expectedProblemStatus); assert.deepEqual(answers, { metric: "score" }); if (codexError) throw codexError; if (envelope.outcome === "prepared") await writeFile(join(context.workspaceDir, "infrastructure.json"), `${JSON.stringify(manifestValue)}\n`); return envelope; };
@@ -131,6 +131,35 @@ test("preparation failures transition the job without publishing, while stale in
   const staleWorker = createPreparationWorker({ rootDir: stale.rootDir, privateDataRoot: "/private-data", rebuildIndex: async () => {}, ...staleDeps });
   assert.deepEqual(await staleWorker({ jobId: JOB, problemId: PROBLEM, answers: { metric: "score" } }), { state: "ready", infrastructureId: "INF-001" });
   assert.deepEqual(staleDeps.order.slice(-3), ["publish", "event:ready-index-stale", "ready"]);
+});
+
+test("an aborted preparation transitions to interrupted instead of failed", async (t) => {
+  const context = await fixture(t);
+  const deps = dependencies(context);
+  const worker = createPreparationWorker({ rootDir: context.rootDir, privateDataRoot: "/private-data", rebuildIndex: async () => {}, ...deps });
+  const controller = new AbortController();
+  controller.abort();
+
+  await assert.rejects(
+    () => worker({ jobId: JOB, problemId: PROBLEM, answers: { metric: "score" }, signal: controller.signal }),
+    /abort/i,
+  );
+  assert.equal(context.jobs.get(JOB).state, "interrupted");
+  assert.equal(deps.order.includes("codex"), false);
+});
+
+test("an abort after the preflight report prevents publication and readiness", async (t) => {
+  const context = await fixture(t);
+  const controller = new AbortController();
+  const deps = dependencies(context, { reportMutation: () => controller.abort() });
+  const worker = createPreparationWorker({ rootDir: context.rootDir, privateDataRoot: "/private-data", rebuildIndex: async () => {}, ...deps });
+
+  await assert.rejects(
+    () => worker({ jobId: JOB, problemId: PROBLEM, answers: { metric: "score" }, signal: controller.signal }),
+    /abort/i,
+  );
+  assert.equal(deps.order.includes("publish"), false);
+  assert.equal(context.jobs.get(JOB).state, "interrupted");
 });
 
 test("Codex, manifest, collision, and publication failures leave no revision or attempt artifacts", async (t) => {

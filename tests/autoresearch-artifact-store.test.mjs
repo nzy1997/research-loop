@@ -172,6 +172,58 @@ test("publication accepts only the exact job workspace and cleans an exclusively
   await assert.rejects(() => lstat(join(stage.rootDir, "problems", PROBLEM_ID, "infrastructure", "INF-001")), /ENOENT/);
 });
 
+test("publication cancellation before the manifest commit removes the partial revision", async (t) => {
+  const stage = await fixture(t);
+  await readyWorkspace(stage);
+  const controller = new AbortController();
+  const fs = await import("node:fs/promises");
+
+  await assert.rejects(
+    () => publishInfrastructureRevision({
+      rootDir: stage.rootDir,
+      stageDir: stage.stageDir,
+      problemId: PROBLEM_ID,
+      expectedRevisionId: "INF-001",
+      signal: controller.signal,
+      fileOps: {
+        mkdir: fs.mkdir,
+        copyFile: async (...args) => {
+          await fs.copyFile(...args);
+          if (!args[1].endsWith(".infrastructure.json.tmp")) controller.abort();
+        },
+        rename: fs.rename,
+        rm: fs.rm,
+      },
+    }),
+    /abort/i,
+  );
+  await assert.rejects(() => lstat(join(stage.rootDir, "problems", PROBLEM_ID, "infrastructure", "INF-001")), /ENOENT/);
+});
+
+test("publication cancellation after the manifest commit preserves the visible revision", async (t) => {
+  const stage = await fixture(t);
+  await readyWorkspace(stage);
+  const controller = new AbortController();
+  const fs = await import("node:fs/promises");
+
+  const result = await publishInfrastructureRevision({
+    rootDir: stage.rootDir,
+    stageDir: stage.stageDir,
+    problemId: PROBLEM_ID,
+    expectedRevisionId: "INF-001",
+    signal: controller.signal,
+    fileOps: {
+      mkdir: fs.mkdir,
+      copyFile: fs.copyFile,
+      rename: async (...args) => { await fs.rename(...args); controller.abort(); },
+      rm: fs.rm,
+    },
+  });
+
+  assert.equal(result.status, "published");
+  assert.equal((await readLatestReadyInfrastructure({ rootDir: stage.rootDir, problemId: PROBLEM_ID })).id, "INF-001");
+});
+
 test("revision readers sort IDs and return only the latest ready manifest", async (t) => {
   const stage = await fixture(t);
   const base = join(stage.rootDir, "problems", PROBLEM_ID, "infrastructure");

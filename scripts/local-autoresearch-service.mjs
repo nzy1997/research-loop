@@ -32,6 +32,38 @@ function rebuildIndex(rootDir, outputRootDir = process.cwd()) {
   });
 }
 
+export async function restoreLatestSuspendedJobs({ jobStore, scheduler }) {
+  const latestByProblem = new Map();
+  for (const job of await jobStore.list()) latestByProblem.set(job.problemId, job);
+  const restored = [];
+  for (const job of latestByProblem.values()) {
+    if (job.state === "needs_input") scheduler.restoreSuspended(job);
+    else if (job.state === "queued" && job.parentJobId) {
+      const parent = await jobStore.read(job.parentJobId);
+      if (parent.state !== "needs_input" || !job.answers || typeof job.answers !== "object" || Array.isArray(job.answers)) {
+        await jobStore.transition?.(job.jobId, "interrupted");
+        continue;
+      }
+      scheduler.restoreSuspended(parent);
+      scheduler.resumeAfterInput(job);
+    } else if (job.state === "queued") scheduler.enqueue(job);
+    else continue;
+    restored.push(job.jobId);
+  }
+  return restored;
+}
+
+export function createCancelablePreparationRunner(worker) {
+  if (typeof worker !== "function") throw new TypeError("worker is required");
+  return (job) => {
+    const controller = new AbortController();
+    return {
+      promise: Promise.resolve().then(() => worker({ ...job, signal: controller.signal })),
+      terminate: () => controller.abort(),
+    };
+  };
+}
+
 export async function startService({
   rootDir = process.cwd(), host = "127.0.0.1", port = 0, token = randomBytes(24).toString("base64url"),
   privateDataRoot = process.env.AUTORESEARCH_PRIVATE_ROOT,
@@ -50,8 +82,9 @@ export async function startService({
     jobStore,
     rebuildIndex: (root) => rebuildIndex(root, indexOutputRoot),
   });
-  const scheduler = createScheduler({ concurrency: 2, runJob: (job) => worker(job) });
+  const scheduler = createScheduler({ concurrency: 2, runJob: createCancelablePreparationRunner(worker) });
   await jobStore.recoverInterrupted();
+  await restoreLatestSuspendedJobs({ jobStore, scheduler });
   const service = await startLocalAutoresearchService({ rootDir: resolvedRoot, host, port, token, scheduler, jobStore });
   return Object.freeze({ ...service, close: async () => { await scheduler.shutdown(); await service.close(); } });
 }

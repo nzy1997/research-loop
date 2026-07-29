@@ -17,6 +17,30 @@ const RESEARCH_INDEX_FILENAMES = new Set([
 ]);
 const ATTEMPT_INDEX_FILENAMES = new Set(["attempt.json"]);
 const COHORT_INDEX_FILENAMES = new Set(["cohort-001-100.json", "cohort-101-200.json"]);
+const LOOPBACK_DEV_HOSTS = new Set(["127.0.0.1", "::1", "[::1]", "localhost"]);
+
+function devHostArguments(args) {
+  const hosts = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    if (argument === "--host" || argument === "--hostname") {
+      const value = args[index + 1];
+      hosts.push(typeof value === "string" && !value.startsWith("-") ? value : null);
+      index += 1;
+    } else if (argument.startsWith("--host=") || argument.startsWith("--hostname=")) {
+      hosts.push(argument.slice(argument.indexOf("=") + 1));
+    }
+  }
+  return hosts;
+}
+
+export function assertAutoresearchDevLoopback({ enabled, configuredHost, args = [] }) {
+  if (!enabled) return;
+  const hosts = [configuredHost, ...devHostArguments(args)].filter((value) => value !== undefined);
+  if (hosts.some((host) => typeof host !== "string" || !LOOPBACK_DEV_HOSTS.has(host))) {
+    throw new TypeError("Autoresearch dev server host must be loopback.");
+  }
+}
 
 export async function ensureProblemWatchDir(rootDir) {
   const problemsPath = join(rootDir, "problems");
@@ -184,6 +208,12 @@ export async function main({
 } = {}) {
   const resolvedRootDir = resolve(rootDir);
   const workspaceRootDir = resolve(environment.AUTORESEARCH_WORKSPACE_ROOT ?? resolvedRootDir);
+  const privateDataRoot = environment.AUTORESEARCH_PRIVATE_ROOT;
+  assertAutoresearchDevLoopback({
+    enabled: typeof privateDataRoot === "string" && privateDataRoot.length > 0,
+    configuredHost: environment.AUTORESEARCH_DEV_HOST,
+    args: vinextDevArgs,
+  });
 
   await runIndexBuildFn(workspaceRootDir, spawnFn, { outputRootDir: resolvedRootDir });
 
@@ -215,7 +245,6 @@ export async function main({
       token: assessmentToken,
     });
 
-    const privateDataRoot = environment.AUTORESEARCH_PRIVATE_ROOT;
     if (typeof privateDataRoot === "string" && privateDataRoot.length > 0) {
       autoresearchService = await startAutoresearchServiceFn({
         rootDir: workspaceRootDir,

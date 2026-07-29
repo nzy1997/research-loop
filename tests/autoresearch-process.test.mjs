@@ -162,3 +162,35 @@ test("terminates with SIGTERM then SIGKILL after the precise grace period", asyn
     globalThis.setTimeout = originalSetTimeout;
   }
 });
+
+test("an abort signal terminates the child and waits for process close", async () => {
+  const controller = new AbortController();
+  const signals = [];
+  const timers = [];
+  const originalSetTimeout = globalThis.setTimeout;
+  let value;
+  globalThis.setTimeout = (callback, delay) => {
+    const timer = { callback, delay, unref() { return this; } };
+    timers.push(timer);
+    return timer;
+  };
+  try {
+    const pending = runProcess({
+      command: "codex", args: [], cwd: "/stage", env: {}, timeoutMs: 100, graceMs: 9,
+      signal: controller.signal,
+      killFn(_child, signal) { signals.push(signal); },
+      spawnFn() { value = child(); return value; },
+    });
+
+    controller.abort();
+    assert.deepEqual(signals, ["SIGTERM"]);
+    assert.equal(timers[1].delay, 9);
+    timers[1].callback();
+    assert.deepEqual(signals, ["SIGTERM", "SIGKILL"]);
+    value.emit("exit", null, "SIGKILL");
+    value.emit("close", null, "SIGKILL");
+    await assert.rejects(pending, (error) => error instanceof ProcessExecutionError && error.signal === "SIGKILL");
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+  }
+});

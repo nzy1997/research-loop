@@ -147,6 +147,31 @@ test("dev supervision starts assessment and autoresearch sidecars when private r
   ]);
 });
 
+test("autoresearch supervision rejects every non-loopback dev host form before startup", async () => {
+  const cases = [
+    { environment: { AUTORESEARCH_PRIVATE_ROOT: "/private/data", AUTORESEARCH_DEV_HOST: "0.0.0.0" }, vinextDevArgs: [] },
+    { environment: { AUTORESEARCH_PRIVATE_ROOT: "/private/data" }, vinextDevArgs: ["--host", "0.0.0.0"] },
+    { environment: { AUTORESEARCH_PRIVATE_ROOT: "/private/data" }, vinextDevArgs: ["--host=0.0.0.0"] },
+    { environment: { AUTORESEARCH_PRIVATE_ROOT: "/private/data" }, vinextDevArgs: ["--host"] },
+    { environment: { AUTORESEARCH_PRIVATE_ROOT: "/private/data" }, vinextDevArgs: ["--hostname", "::"] },
+  ];
+
+  for (const options of cases) {
+    let started = false;
+    await assert.rejects(() => main({
+      rootDir: "/tmp/research-loop-dev-root",
+      ...options,
+      runIndexBuildFn: async () => { started = true; },
+      watchProblemFilesFn: async () => { started = true; return { close() {} }; },
+      startAssessmentServiceFn: async () => { started = true; return { url: "http://127.0.0.1", close: async () => {} }; },
+      startAutoresearchServiceFn: async () => { started = true; return { origin: "http://127.0.0.1", token: "token", close: async () => {} }; },
+      spawnFn: () => { started = true; return new EventEmitter(); },
+      processRef: new EventEmitter(),
+    }), /loopback/i);
+    assert.equal(started, false);
+  }
+});
+
 test("dev supervision closes assessment when autoresearch startup fails", async () => {
   let spawned = false;
   let assessmentClosed = 0;
